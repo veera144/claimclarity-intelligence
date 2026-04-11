@@ -1,0 +1,17 @@
+{
+  "name": "@claimclarity/processor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts"
+  },
+  "dependencies": {
+    "@claimclarity/db": "workspace:*",
+    "@claimclarity/shared": "workspace:*",
+    "express": "^5.1.0"
+  }
+}
+
