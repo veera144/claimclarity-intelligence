@@ -21,12 +21,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     data?.role === 'reviewer' || data?.role === 'expert' || data?.role === 'admin'
 
   if (error || !isAllowedRole) {
-    return NextResponse.redirect(new URL('/access-denied', request.url))
+    return NextResponse.rewrite(new URL('/access-denied', request.url), { status: 403 })
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
