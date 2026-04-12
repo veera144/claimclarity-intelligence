@@ -6,6 +6,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
+    "test:module1": "node --loader ts-node/esm apps/web/tests/module1.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "simple-git-hooks": {

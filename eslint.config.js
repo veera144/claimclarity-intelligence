@@ -4,13 +4,21 @@ import tseslint from 'typescript-eslint'
 
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- MASTER_SPEC.md requires the typescript-eslint config helper shape.
 export default tseslint.config(
+  {
+    ignores: ['**/.next/**', '**/dist/**', '**/node_modules/**']
+  },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.js', 'postcss.config.js']
+          allowDefaultProject: [
+            'apps/dashboard/next.config.mjs',
+            'apps/web/next.config.mjs',
+            'eslint.config.js',
+            'postcss.config.js'
+          ]
         }
       }
     },

@@ -10,7 +10,7 @@ Status legend:
 
 | Module | Name | Status | Reviewer decision | Notes |
 |---|---|---|---|---|
-| 0 | Infrastructure and Schema | READY FOR REVIEW |  | Scaffold complete; Supabase verification passed 46/46 checkpoints. |
+| 0 | Infrastructure and Schema | DONE | PASS | Scaffold complete; Supabase verification passed 46/46 checkpoints; no required fixes. |
 | 1 | Auth and Consent | NOT STARTED |  |  |
 | 2 | Document Upload and Quality Check | NOT STARTED |  |  |
 | 3 | Payment Integration | NOT STARTED |  |  |
