@@ -7,6 +7,7 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "test:module1": "node --loader ts-node/esm apps/web/tests/module1.test.ts",
+    "test:module2": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/web/tests/module2.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "simple-git-hooks": {

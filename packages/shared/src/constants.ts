@@ -32,6 +32,15 @@ export const JOB_RETRY_BASE_MINUTES = 2
 export const FOLLOW_UP_DAYS = [30, 60, 90] as const
 export const OUTCOME_TOKEN_TTL_DAYS = 7
 export const REQUIRED_DOC_TYPES = ['policy', 'hospital_bill', 'insurer_response'] as const
+export const POLICY_DOC_TYPES = ['policy', 'cis'] as const
+export const ACCEPTED_DOCUMENT_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/tiff'
+] as const
+export const MAX_DOCUMENT_PAGES = 50
+export const MIN_IMAGE_DPI = 100
 export const REQUIRED_CONSENT_TYPES = [
   'data_processing',
   'no_training',
