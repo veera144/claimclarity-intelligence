@@ -376,11 +376,15 @@ export type Database = {
         Args: { tbl: string; col: string }
         Returns: boolean
       }
-      verify_rls_enabled: {
-        Args: { tbl: string }
-        Returns: boolean
+        verify_rls_enabled: {
+          Args: { tbl: string }
+          Returns: boolean
+        }
+        next_case_ref_seq: {
+          Args: Record<string, never>
+          Returns: number
+        }
       }
-    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

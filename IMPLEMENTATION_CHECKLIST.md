@@ -12,7 +12,7 @@ Status legend:
 |---|---|---|---|---|
 | 0 | Infrastructure and Schema | DONE | PASS | Scaffold complete; Supabase verification passed 46/46 checkpoints; no required fixes. |
 | 1 | Auth and Consent | NOT STARTED |  |  |
-| 2 | Document Upload and Quality Check | NOT STARTED |  |  |
+| 2 | Document Upload and Quality Check | DONE | PASS | Live case_ref RPC dependency resolved; /api/cases verified against live DB; lint, typecheck, and Module 2 checkpoints passed 8/8. |
 | 3 | Payment Integration | NOT STARTED |  |  |
 | 4 | OCR and Extraction Pipeline | NOT STARTED |  |  |
 | 5 | Rules Engine and Knowledge Base | NOT STARTED |  |  |
