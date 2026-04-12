@@ -11,7 +11,7 @@ Status legend:
 | Module | Name | Status | Reviewer decision | Notes |
 |---|---|---|---|---|
 | 0 | Infrastructure and Schema | DONE | PASS | Scaffold complete; Supabase verification passed 46/46 checkpoints; no required fixes. |
-| 1 | Auth and Consent | NOT STARTED |  |  |
+| 1 | Auth and Consent | DONE | PASS | Auth sync working; tombstone dependency resolved; Module 1 verification passed 7/7 checkpoints; no required fixes. |
 | 2 | Document Upload and Quality Check | NOT STARTED |  |  |
 | 3 | Payment Integration | NOT STARTED |  |  |
 | 4 | OCR and Extraction Pipeline | NOT STARTED |  |  |
