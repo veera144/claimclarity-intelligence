@@ -23,6 +23,8 @@ import { createServerClient } from '@claimclarity/db'
 import { getMissingConsentTypes } from '../../../../lib/consent'
 import { AuthorizationError, toApiResponse } from '../../../../lib/errors'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(): Promise<Response> {
   try {
     const client = await createServerClient()

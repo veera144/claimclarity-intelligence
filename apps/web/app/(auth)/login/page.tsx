@@ -1,11 +1,11 @@
 'use client'
 
 import type { FormEvent, ReactElement } from 'react'
-import { useState, useTransition } from 'react'
+import { Suspense, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@claimclarity/db'
 
-export default function LoginPage(): ReactElement {
+function LoginForm(): ReactElement {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
@@ -82,5 +82,13 @@ export default function LoginPage(): ReactElement {
         </div>
       </form>
     </main>
+  )
+}
+
+export default function LoginPage(): ReactElement {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }
