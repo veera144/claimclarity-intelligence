@@ -23,7 +23,7 @@ import { Redis } from '@upstash/redis'
 
 import { getRequestIp } from './request'
 
-type RateLimitKind = 'auth' | 'upload'
+type RateLimitKind = 'auth' | 'upload' | 'payment'
 
 type MemoryBucket = {
   resetAt: number
@@ -35,6 +35,7 @@ const memoryBuckets = new Map<string, MemoryBucket>()
 const RATE_LIMIT_CONFIG: Record<RateLimitKind, { maxRequests: number; windowMs: number }> = {
   auth: { maxRequests: 10, windowMs: 10_000 },
   upload: { maxRequests: 30, windowMs: 60_000 },
+  payment: { maxRequests: 5, windowMs: 60_000 },
 }
 
 function getUpstashLimiter(kind: RateLimitKind): Ratelimit | null {
@@ -47,7 +48,9 @@ function getUpstashLimiter(kind: RateLimitKind): Ratelimit | null {
 
   const redis = new Redis({ url, token })
   const limiter =
-    kind === 'auth' ? Ratelimit.slidingWindow(10, '10 s') : Ratelimit.slidingWindow(30, '60 s')
+    kind === 'auth'
+      ? Ratelimit.slidingWindow(10, '10 s')
+      : Ratelimit.slidingWindow(RATE_LIMIT_CONFIG[kind].maxRequests, '60 s')
 
   return new Ratelimit({
     redis,
@@ -94,6 +97,24 @@ export async function rateLimitRequest(
   kind: RateLimitKind
 ): Promise<Response | null> {
   const identifier = getRequestIp(request) ?? 'unknown'
+  return rateLimitIdentifier(kind, identifier)
+}
+
+/**
+ * Applies a configured public route rate limit for a known authenticated principal.
+ *
+ * SIDE EFFECTS: writes to Redis when Upstash is configured, otherwise mutates in-memory counters
+ * THROWS: never, falls back to in-memory limiting when Redis fails
+ * IDEMPOTENT: no, each call consumes one quota unit
+ *
+ * @param kind - Rate-limit profile to apply
+ * @param identifier - Stable caller identifier, usually an authenticated user id
+ * @returns Null when allowed, otherwise a 429 Response
+ */
+export async function rateLimitIdentifier(
+  kind: RateLimitKind,
+  identifier: string
+): Promise<Response | null> {
   const upstashLimiter = getUpstashLimiter(kind)
 
   if (upstashLimiter) {

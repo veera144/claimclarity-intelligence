@@ -45,6 +45,12 @@ export class AuthorizationError extends ClaimClarityError {
   }
 }
 
+export class ConflictError extends ClaimClarityError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, 'CONFLICT', 409, context)
+  }
+}
+
 export class NotFoundError extends ClaimClarityError {
   constructor(entity: string, id: string) {
     super(`${entity} not found`, 'NOT_FOUND', 404, { entity, id })
