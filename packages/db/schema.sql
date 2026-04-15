@@ -94,10 +94,34 @@ CREATE TABLE cases (
   generation_failure_reason TEXT,
   payment_waived            BOOLEAN NOT NULL DEFAULT FALSE,
   payment_waived_reason     TEXT,
+  payment_mode              TEXT NOT NULL DEFAULT 'real_payment'
+                              CHECK (payment_mode IN (
+                                'real_payment','admin_waived',
+                                'internal_access_code','test_simulated'
+                              )),
+  payment_reporting_category TEXT NOT NULL DEFAULT 'paid'
+                              CHECK (payment_reporting_category IN ('paid','waived','test')),
   original_approved_inr     INTEGER,
   originally_deducted_inr   INTEGER,
   created_at                TIMESTAMPTZ DEFAULT NOW(),
-  updated_at                TIMESTAMPTZ DEFAULT NOW()
+  updated_at                TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT cases_payment_mode_consistency CHECK (
+    (
+      payment_mode = 'real_payment'
+      AND payment_waived = FALSE
+      AND payment_reporting_category = 'paid'
+    )
+    OR (
+      payment_mode IN ('admin_waived','internal_access_code')
+      AND payment_waived = TRUE
+      AND payment_reporting_category = 'waived'
+    )
+    OR (
+      payment_mode = 'test_simulated'
+      AND payment_waived = TRUE
+      AND payment_reporting_category = 'test'
+    )
+  )
 );
 
 COMMENT ON COLUMN cases.claim_amount_inr IS
@@ -106,6 +130,10 @@ COMMENT ON COLUMN cases.original_approved_inr IS
   'Amount insurer originally approved BEFORE any appeal. Whole rupees. Extracted from insurer letter.';
 COMMENT ON COLUMN cases.originally_deducted_inr IS
   'Amount insurer originally deducted BEFORE any appeal. Whole rupees. Extracted from insurer letter.';
+COMMENT ON COLUMN cases.payment_mode IS
+  'How Module 3 allowed the case to enter processing: real_payment, admin_waived, internal_access_code, or test_simulated.';
+COMMENT ON COLUMN cases.payment_reporting_category IS
+  'Reporting separation for downstream analytics: paid, waived, or test. Do not infer from payments rows alone.';
 
 ALTER TABLE consents ADD CONSTRAINT fk_consents_case
   FOREIGN KEY (case_id) REFERENCES cases(id);

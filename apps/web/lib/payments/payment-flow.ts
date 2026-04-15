@@ -20,12 +20,14 @@
 
 import {
   activateCaseAfterPayment,
+  activateCaseWithoutPayment,
   getPatientEmail,
   listDocumentsForCase,
   logAudit,
   markPaymentPaid,
   queueProcessingJob,
   type DbClient,
+  type PaymentMode,
   type PaymentRow,
 } from '@claimclarity/db'
 
@@ -38,6 +40,17 @@ type ConfirmPaymentInput = {
   razorpayPaymentId: string
   razorpaySignature?: string
   actorId?: string
+}
+
+type ConfirmWithoutPaymentInput = {
+  client: DbClient
+  caseId: string
+  caseRef: string
+  mode: Exclude<PaymentMode, 'real_payment'>
+  reason: string
+  auditAction: string
+  actorId: string
+  actorRole: 'patient' | 'admin' | 'system'
 }
 
 export type ConfirmPaymentResult = {
@@ -119,6 +132,62 @@ export async function confirmPaymentAndActivateCase(
       amount_inr: paidPayment.amount_inr,
       case_ref: input.caseRef,
       email_sent: emailResult.sent,
+    },
+  })
+
+  return {
+    success: true,
+    caseRef: input.caseRef,
+    alreadyProcessed: false,
+  }
+}
+
+/**
+ * Activates a payment-pending case through an approved non-Razorpay payment mode.
+ *
+ * SIDE EFFECTS: updates cases, writes processing_jobs/audit_log
+ * THROWS: Error when Supabase mutations fail unexpectedly
+ * IDEMPOTENT: yes for downstream OCR job creation
+ *
+ * @param input - Case, mode, and audit details for a waived or simulated activation
+ * @returns Confirmation result for the API response
+ */
+export async function confirmWithoutPaymentAndActivateCase(
+  input: ConfirmWithoutPaymentInput
+): Promise<ConfirmPaymentResult> {
+  await activateCaseWithoutPayment({
+    client: input.client,
+    caseId: input.caseId,
+    mode: input.mode,
+    reason: input.reason,
+  })
+
+  const documents = await listDocumentsForCase({
+    client: input.client,
+    caseId: input.caseId,
+  })
+
+  await Promise.all(
+    documents.map((document) =>
+      queueProcessingJob({
+        client: input.client,
+        caseId: input.caseId,
+        documentId: document.id,
+        jobType: 'ocr',
+        idempotencyKey: `ocr:${input.caseId}:${document.id}`,
+      })
+    )
+  )
+
+  await logAudit({
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    action: input.auditAction,
+    entityType: 'case',
+    entityId: input.caseId,
+    metadata: {
+      case_ref: input.caseRef,
+      payment_mode: input.mode,
     },
   })
 

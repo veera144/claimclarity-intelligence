@@ -25,6 +25,9 @@ import type { Database, DbClient } from '../types'
 
 type CaseStatus = Database['public']['Tables']['cases']['Row']['status']
 type PaymentStatus = Database['public']['Tables']['payments']['Row']['status']
+export type PaymentMode = Database['public']['Tables']['cases']['Row']['payment_mode']
+export type PaymentReportingCategory =
+  Database['public']['Tables']['cases']['Row']['payment_reporting_category']
 
 export type PaymentCase = {
   id: string
@@ -32,6 +35,8 @@ export type PaymentCase = {
   patient_id: string
   status: CaseStatus
   payment_waived: boolean
+  payment_mode: PaymentMode
+  payment_reporting_category: PaymentReportingCategory
 }
 
 export type PaymentRow = {
@@ -72,7 +77,9 @@ export async function getPaymentCaseById(input: {
 }): Promise<PaymentCase | null> {
   const { data, error } = await input.client
     .from('cases')
-    .select('id, case_ref, patient_id, status, payment_waived')
+    .select(
+      'id, case_ref, patient_id, status, payment_waived, payment_mode, payment_reporting_category'
+    )
     .eq('id', input.caseId)
     .maybeSingle()
 
@@ -99,7 +106,9 @@ export async function getPaymentCaseByRef(input: {
 }): Promise<PaymentCase | null> {
   const { data, error } = await input.client
     .from('cases')
-    .select('id, case_ref, patient_id, status, payment_waived')
+    .select(
+      'id, case_ref, patient_id, status, payment_waived, payment_mode, payment_reporting_category'
+    )
     .eq('case_ref', input.caseRef)
     .maybeSingle()
 
@@ -342,6 +351,46 @@ export async function activateCaseAfterPayment(input: {
     .update({
       status: 'processing',
       current_step: 'quality_check',
+      payment_mode: 'real_payment',
+      payment_reporting_category: 'paid',
+      sla_deadline: deadlineAfterSla(now),
+      updated_at: now.toISOString(),
+    })
+    .eq('id', input.caseId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+/**
+ * Moves a waived or simulated case into processing without creating a payment row.
+ *
+ * SIDE EFFECTS: updates cases
+ * THROWS: Error when Supabase rejects the mutation
+ * IDEMPOTENT: yes, repeated calls keep the same mode and processing state
+ *
+ * @param input - Case id, waiver mode, reason, and database client
+ * @returns Nothing
+ */
+export async function activateCaseWithoutPayment(input: {
+  client: DbClient
+  caseId: string
+  mode: Exclude<PaymentMode, 'real_payment'>
+  reason: string
+  now?: Date
+}): Promise<void> {
+  const now = input.now ?? new Date()
+  const paymentReportingCategory = input.mode === 'test_simulated' ? 'test' : 'waived'
+  const { error } = await input.client
+    .from('cases')
+    .update({
+      status: 'processing',
+      current_step: 'quality_check',
+      payment_waived: true,
+      payment_waived_reason: input.reason,
+      payment_mode: input.mode,
+      payment_reporting_category: paymentReportingCategory,
       sla_deadline: deadlineAfterSla(now),
       updated_at: now.toISOString(),
     })

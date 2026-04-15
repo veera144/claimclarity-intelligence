@@ -97,7 +97,11 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ success: true, caseRef: caseRow.case_ref })
     }
 
-    if (caseRow.payment_waived || caseRow.status !== 'payment_pending') {
+    if (
+      caseRow.payment_waived ||
+      caseRow.payment_mode !== 'real_payment' ||
+      caseRow.status !== 'payment_pending'
+    ) {
       throw new ValidationError('Payment is not available for this case')
     }
 
