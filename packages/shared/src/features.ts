@@ -23,6 +23,8 @@ export const FEATURES = {
   PRE_APPROVAL_ESTIMATES: false,
   US_MARKET: false,
   AUTOMATED_ASSIGNMENT: false,
-  REALTIME_STATUS: true
+  REALTIME_STATUS: true,
+  INTERNAL_ACCESS_CODE_WAIVER: true,
+  TEST_SIMULATED_PAYMENT: true
 } as const
 

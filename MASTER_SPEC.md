@@ -32,7 +32,13 @@ Inside this master file:
 - No approval prediction. No treatment advice. No fraud accusations.
 - Outcome tracking is part of the core product, not optional reporting.
 - Broker/partner portals are out of V1 scope.
-- For free pilot cases, payment is bypassed cleanly. No Razorpay rows or verification for waived cases.
+- Payment modes are explicit:
+  - `real_payment`: paid Razorpay checkout.
+  - `admin_waived`: admin-only pilot or service recovery waiver.
+  - `internal_access_code`: hidden allowlisted internal code waiver, validated server-side only.
+  - `test_simulated`: dev/test-only simulated activation.
+- For waived or simulated cases, payment is bypassed cleanly. No Razorpay calls, Razorpay verification, or `payments` rows.
+- Downstream reporting must separate paid, waived, and test/simulated cases; do not infer waived volume from missing payment rows alone.
 - Outcome updates require either:
   1. authenticated patient session, or
   2. one-time signed outcome token.
@@ -155,6 +161,8 @@ NEXT_PUBLIC_DASHBOARD_URL=http://localhost:3001
 PRIVACY_POLICY_VERSION=v1.0-2024-04-01
 TERMS_VERSION=v1.0-2024-04-01
 RAILWAY_HEALTH_CHECK_PATH=/health
+INTERNAL_ACCESS_CODE_SHA256_HASHES=
+ALLOW_TEST_SIMULATED_PAYMENTS=false
 
 Copy to .env.local in each app directory.
 
@@ -258,10 +266,34 @@ CREATE TABLE cases (
   generation_failure_reason TEXT,
   payment_waived            BOOLEAN NOT NULL DEFAULT FALSE,
   payment_waived_reason     TEXT,
+  payment_mode              TEXT NOT NULL DEFAULT 'real_payment'
+                              CHECK (payment_mode IN (
+                                'real_payment','admin_waived',
+                                'internal_access_code','test_simulated'
+                              )),
+  payment_reporting_category TEXT NOT NULL DEFAULT 'paid'
+                              CHECK (payment_reporting_category IN ('paid','waived','test')),
   original_approved_inr     INTEGER,
   originally_deducted_inr   INTEGER,
   created_at                TIMESTAMPTZ DEFAULT NOW(),
-  updated_at                TIMESTAMPTZ DEFAULT NOW()
+  updated_at                TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT cases_payment_mode_consistency CHECK (
+    (
+      payment_mode = 'real_payment'
+      AND payment_waived = FALSE
+      AND payment_reporting_category = 'paid'
+    )
+    OR (
+      payment_mode IN ('admin_waived','internal_access_code')
+      AND payment_waived = TRUE
+      AND payment_reporting_category = 'waived'
+    )
+    OR (
+      payment_mode = 'test_simulated'
+      AND payment_waived = TRUE
+      AND payment_reporting_category = 'test'
+    )
+  )
 );
 
 COMMENT ON COLUMN cases.claim_amount_inr IS
@@ -270,6 +302,10 @@ COMMENT ON COLUMN cases.original_approved_inr IS
   'Amount insurer originally approved BEFORE any appeal. Whole rupees. Extracted from insurer letter.';
 COMMENT ON COLUMN cases.originally_deducted_inr IS
   'Amount insurer originally deducted BEFORE any appeal. Whole rupees. Extracted from insurer letter.';
+COMMENT ON COLUMN cases.payment_mode IS
+  'How Module 3 allowed the case to enter processing: real_payment, admin_waived, internal_access_code, or test_simulated.';
+COMMENT ON COLUMN cases.payment_reporting_category IS
+  'Reporting separation for downstream analytics: paid, waived, or test. Do not infer from payments rows alone.';
 
 ALTER TABLE consents ADD CONSTRAINT fk_consents_case
   FOREIGN KEY (case_id) REFERENCES cases(id);
@@ -1321,6 +1357,25 @@ PREREQUISITES:
 
 TASK: Razorpay payment flow. Order creation, verification, case activation.
       Waived cases: never touch Razorpay. Clean separation.
+      Module 3 payment modes:
+        - real_payment: Razorpay order + payment row + verification.
+        - admin_waived: admin-only waiver; no Razorpay call and no payments row.
+        - internal_access_code: hidden allowlisted internal code waiver; no Razorpay call and no payments row.
+        - test_simulated: dev/test-only simulated activation; no Razorpay call and no payments row.
+
+Payment mode rules:
+- `cases.payment_mode` is the source of truth for how the case entered processing.
+- `cases.payment_reporting_category` is the source of truth for paid vs waived vs test reporting.
+- Waived and simulated cases must set `payment_waived=TRUE`.
+- Real paid cases must set `payment_waived=FALSE`.
+- Do not implement public coupon, promo, discount, referral, or code-entry marketing flows.
+- Internal access codes are server-side only and must be validated against an allowlist of SHA-256 hashes.
+- Feature flags must gate internal access-code waiver and test simulation code paths.
+- Test simulation must be rejected in production and must also require `ALLOW_TEST_SIMULATED_PAYMENTS=true`.
+- Every successful or failed waiver/simulation attempt must write `audit_log`.
+- Waiver/simulation activation may only happen for authenticated users and `status='payment_pending'`, so consent, ownership, and document checks already remain intact.
+- Admin waiver requires an authenticated admin. Internal access-code and test simulation require the authenticated patient to own the case.
+- Waived or simulated cases must never call Razorpay and must never insert into `payments`.
 
 ═══════════════════════════════════════════════════════
 1. PAYMENT PAGE (/app/cases/[caseRef]/pay/page.tsx)
@@ -1362,6 +1417,7 @@ Verify before creating order:
   - user owns the case
   - case.status = 'payment_pending'
   - case.payment_waived = FALSE
+  - case.payment_mode = 'real_payment'
   - No existing payment with status IN ('pending','paid') for this case
 
 Create Razorpay order:
@@ -1390,12 +1446,80 @@ On valid signature:
   UPDATE cases:
     status='processing',
     current_step='quality_check',
+    payment_mode='real_payment',
+    payment_reporting_category='paid',
     sla_deadline=NOW() + INTERVAL '24 hours'
   Queue OCR processing_jobs for each document in case (idempotency_key: 'ocr:{caseId}:{docId}')
   Send confirmation email via Resend:
     Subject: "Payment received — Case {caseRef} is being processed"
   Log audit_log: { action: 'payment_verified', metadata: { amount_inr: 69900 } }
   Return: { success: true, caseRef }
+
+═══════════════════════════════════════════════════════
+3A. PAYMENT CONTROLS (/api/payments/controls/route.ts)
+═══════════════════════════════════════════════════════
+
+POST - authenticated user
+Rate limit: same payment limiter as order creation.
+
+Input:
+  { caseId, mode, accessCode?, reason? }
+
+Allowed modes:
+  - `admin_waived`: admin only; `reason` required.
+  - `internal_access_code`: patient owner only; `accessCode` required.
+  - `test_simulated`: patient owner only; dev/test only.
+
+Common verification before activation:
+  - case exists
+  - case.status = 'payment_pending'
+  - no existing payment with status IN ('pending','paid') for this case
+  - no Razorpay API call is made
+  - no row is inserted into `payments`
+
+Admin waived:
+  - require authenticated user role `admin`
+  - UPDATE cases:
+      payment_waived=TRUE
+      payment_waived_reason=reason
+      payment_mode='admin_waived'
+      payment_reporting_category='waived'
+      status='processing'
+      current_step='quality_check'
+      sla_deadline=NOW() + INTERVAL '24 hours'
+  - Queue OCR jobs exactly like paid activation.
+  - Log `payment_admin_waived`.
+
+Internal access code:
+  - require `FEATURES.INTERNAL_ACCESS_CODE_WAIVER=TRUE`
+  - hash submitted `accessCode` with SHA-256 and compare only to `INTERNAL_ACCESS_CODE_SHA256_HASHES`
+  - do not log raw access codes or return allowlist details
+  - on failed validation, log `payment_internal_access_code_failed` and keep case unchanged
+  - on success, set:
+      payment_waived=TRUE
+      payment_waived_reason='internal_access_code'
+      payment_mode='internal_access_code'
+      payment_reporting_category='waived'
+      status='processing'
+      current_step='quality_check'
+      sla_deadline=NOW() + INTERVAL '24 hours'
+  - Queue OCR jobs exactly like paid activation.
+  - Log `payment_internal_access_code_redeemed`.
+
+Test simulated:
+  - require `FEATURES.TEST_SIMULATED_PAYMENT=TRUE`
+  - require `NODE_ENV != 'production'`
+  - require `ALLOW_TEST_SIMULATED_PAYMENTS=true`
+  - set:
+      payment_waived=TRUE
+      payment_waived_reason='test_simulated'
+      payment_mode='test_simulated'
+      payment_reporting_category='test'
+      status='processing'
+      current_step='quality_check'
+      sla_deadline=NOW() + INTERVAL '24 hours'
+  - Queue OCR jobs exactly like paid activation.
+  - Log `payment_test_simulated`.
 
 ═══════════════════════════════════════════════════════
 4. RAZORPAY WEBHOOK (/api/webhooks/razorpay/route.ts)
@@ -1462,6 +1586,24 @@ TEST 7: Full refund
 - POST /api/admin/payments/{id}/refund { reason: 'sla_breach', refundType: 'full' }
 - CHECKPOINT: payment.status='refunded', refund_amount_inr=69900 [PASS/FAIL]
 - CHECKPOINT: case.status='closed' [PASS/FAIL]
+
+TEST 8: Admin waiver activates without Razorpay
+- POST /api/payments/controls { mode: 'admin_waived', caseId, reason }
+- CHECKPOINT: case.payment_mode='admin_waived' and payment_reporting_category='waived' [PASS/FAIL]
+- CHECKPOINT: no Razorpay order created and no payment row inserted [PASS/FAIL]
+
+TEST 9: Internal access code is allowlist-only
+- POST /api/payments/controls { mode: 'internal_access_code', caseId, accessCode: 'wrong' }
+- CHECKPOINT: returns 400/403, case remains payment_pending, no payment row inserted [PASS/FAIL]
+- POST with allowlisted code hash configured server-side
+- CHECKPOINT: case.payment_mode='internal_access_code', payment_reporting_category='waived', status='processing' [PASS/FAIL]
+- CHECKPOINT: no Razorpay order created and no payment row inserted [PASS/FAIL]
+
+TEST 10: Test simulation is dev/test-only and separated
+- With NODE_ENV != 'production' and ALLOW_TEST_SIMULATED_PAYMENTS=true,
+  POST /api/payments/controls { mode: 'test_simulated', caseId }
+- CHECKPOINT: case.payment_mode='test_simulated', payment_reporting_category='test', status='processing' [PASS/FAIL]
+- CHECKPOINT: no Razorpay order created and no payment row inserted [PASS/FAIL]
 
 REPORT: MODULE 3 CHECKPOINT REPORT — N/N passed — PASS/FAIL
 ```
@@ -4119,6 +4261,8 @@ export const FEATURES = {
   US_MARKET:              false,  // V3+
   AUTOMATED_ASSIGNMENT:   false,  // V1.1
   REALTIME_STATUS:        true,   // V1
+  INTERNAL_ACCESS_CODE_WAIVER: true,  // Module 3 pilot control
+  TEST_SIMULATED_PAYMENT: true,  // Module 3 dev/test only
 } as const
 ```
 

@@ -365,6 +365,13 @@ async function createTestCase(input: {
       intake_channel: 'patient_web',
       status: 'documents_pending',
       payment_waived: input.paymentWaived ?? false,
+      ...(input.paymentWaived
+        ? {
+            payment_waived_reason: 'module2_test_waived',
+            payment_mode: 'admin_waived',
+            payment_reporting_category: 'waived',
+          }
+        : {}),
     })
     .select('id, case_ref')
     .single()
