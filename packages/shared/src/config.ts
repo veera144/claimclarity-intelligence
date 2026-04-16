@@ -40,9 +40,10 @@ export const config = {
     anonKey: requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
     serviceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY')
   },
-  anthropic: {
-    apiKey: requireEnv('ANTHROPIC_API_KEY'),
-    model: 'claude-sonnet-4-20250514' as const
+  openai: {
+    apiKey: requireEnv('OPENAI_API_KEY'),
+    model: process.env.OPENAI_AI_DRAFT_MODEL ?? 'gpt-5.4',
+    fallbackModel: process.env.OPENAI_AI_DRAFT_FALLBACK_MODEL ?? 'gpt-5.4-mini'
   },
   razorpay: {
     keyId: requireEnv('RAZORPAY_KEY_ID'),
