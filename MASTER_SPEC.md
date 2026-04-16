@@ -141,6 +141,10 @@ SUPABASE_SERVICE_ROLE_KEY=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_REGION=ap-south-1
+AWS_TEXTRACT_STAGING_BUCKET=
+AWS_TEXTRACT_STAGING_PREFIX=ocr-staging
+TEXTRACT_ASYNC_POLL_INTERVAL_MS=5000
+TEXTRACT_ASYNC_TIMEOUT_MS=120000
 ANTHROPIC_API_KEY=
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
@@ -1478,18 +1482,60 @@ PREREQUISITES:
 TASK: AWS Textract OCR, bill normalization, policy chunking, insurer letter parsing.
       Capture original_approved_inr and originally_deducted_inr into cases table.
 
+Module 4 architecture decision:
+- Supabase Storage remains the canonical document store. Do not move patient upload ownership to S3.
+- Use Textract sync where AWS supports the document input directly.
+- Use private S3 staging only when Textract async PDF/TIFF processing is required.
+- Route unsupported, oversized, encrypted, unreadable, low-confidence, or operationally risky documents
+  to `manual_required` with reviewer notification.
+- OCR jobs remain idempotent. Never run OCR twice for the same document/job idempotency key.
+- Store only normalized `documents.extracted_json`. Do not store raw Textract responses.
+- Do not send raw OCR text to the AI layer.
+
 ═══════════════════════════════════════════════════════
 1. TEXTRACT CLIENT (/apps/processor/src/ocr/textractClient.ts)
 ═══════════════════════════════════════════════════════
 
 Use @aws-sdk/client-textract. Region: ap-south-1.
+Use @aws-sdk/client-s3 only for temporary Textract async staging.
+
+Required config:
+- AWS_REGION=ap-south-1
+- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY with least-privilege Textract + staging-bucket access
+- AWS_TEXTRACT_STAGING_BUCKET private bucket with public access blocked and lifecycle cleanup
+- AWS_TEXTRACT_STAGING_PREFIX default `ocr-staging`
+- TEXTRACT_ASYNC_POLL_INTERVAL_MS default 5000
+- TEXTRACT_ASYNC_TIMEOUT_MS default 120000
 
 Function: extractDocument(storagePath, docType): Promise<ExtractionResult>
 
-- Fetch from Supabase Storage (service role signed URL, 5min)
-- For single-page or small PDFs: AnalyzeDocument API (sync)
-- For multi-page PDFs: StartDocumentAnalysis (async) + polling every 5s, timeout 120s
+- Fetch from Supabase Storage using service-role access only.
+- For single-page PNG/JPEG within Textract limits: AnalyzeDocument may use bytes input.
+- For single-page PDF/TIFF within Textract limits: AnalyzeDocument should use S3Object input
+  where AWS SDK/API constraints require it.
+- For multi-page PDF/TIFF or any document requiring Textract async:
+  1. Download from Supabase Storage.
+  2. Upload a temporary private object to S3 under AWS_TEXTRACT_STAGING_PREFIX.
+  3. Call StartDocumentAnalysis with S3 DocumentLocation.
+  4. Poll GetDocumentAnalysis every TEXTRACT_ASYNC_POLL_INTERVAL_MS until success/failure or
+     TEXTRACT_ASYNC_TIMEOUT_MS.
+  5. Delete the staged S3 object in a finally block after success, failure, timeout, or manual_required.
 - Feature types: TABLES + FORMS (both needed for bills and insurer letters)
+
+S3 staging rules:
+- Staged objects are temporary OCR handoff copies, not the canonical document record.
+- Staging key must be deterministic from case_id + document_id + processing_job id.
+- Bucket must block public access and allow only the processor role/service user.
+- Lifecycle cleanup must expire any leftover staged object within 24 hours.
+- Do not persist staged S3 keys in DB for pilot unless cleanup auditing later requires it.
+
+Manual fallback:
+- If input is unsupported by Textract, over Textract size/page limits, encrypted, unreadable,
+  staging upload fails, async polling times out, or extraction confidence is below threshold:
+  set quality_status='manual_required', add quality_failure_reason, and INSERT reviewer_notification.
+- Set ocr_status='completed' only when Textract returned usable output; otherwise set ocr_status='failed'.
+- Do not queue rules_engine while any required document is failed, pending, running, retrying,
+  missing usable extracted_json, or marked manual_required.
 
 Confidence calculation: average WORD block confidence scores.
 Update documents.extraction_confidence.
@@ -1591,7 +1637,7 @@ For each document:
 1. Mark job status='running', started_at=NOW()
 2. Run textractClient
 3. Based on doc_type, run appropriate normalizer
-4. UPDATE documents: extracted_json (structured), extracted_text (raw), ocr_status='completed'
+4. UPDATE documents: extracted_json (structured), extracted_text=NULL, ocr_status='completed'
 5. Mark job status='completed'
 
 On failure:
@@ -1599,13 +1645,16 @@ On failure:
   If attempt_count < max_attempts: status='retrying', next_retry_at=NOW()+2^attempt minutes
   If attempt_count >= max_attempts: status='failed', alert admin, INSERT reviewer_notification
 
-After ALL OCR jobs for a case complete:
+After ALL required OCR jobs for a case are complete with usable extracted_json:
   - Queue processing_job: { job_type:'rules_engine', case_id,
       idempotency_key: 'rules_engine:{caseId}' }
   - UPDATE cases: current_step='rules_engine'
 
 OCR is NEVER run twice on same document (idempotency_key enforces this).
-Raw Textract response is NEVER stored. Only normalized extracted_json is stored.
+Raw Textract response is NEVER stored.
+Raw OCR text is NEVER stored in extracted_text during Module 4.
+Only normalized extracted_json is stored for downstream modules.
+rules_engine queueing is idempotent and only occurs after required OCR completion.
 
 ═══════════════════════════════════════════════════════
 SELF-VERIFICATION SUITE
@@ -1657,6 +1706,21 @@ TEST 8: All OCR done → rules_engine job queued
 - Complete OCR for all 3 documents in test case
 - SELECT * FROM processing_jobs WHERE case_id=testCaseId AND job_type='rules_engine'
 - CHECKPOINT: row exists with status='queued' [PASS/FAIL]
+
+TEST 9: Async PDF/TIFF uses temporary S3 staging
+- Simulate a multi-page PDF/TIFF requiring Textract async
+- CHECKPOINT: StartDocumentAnalysis receives DocumentLocation.S3Object [PASS/FAIL]
+- CHECKPOINT: staged S3 object is deleted after completion/failure [PASS/FAIL]
+
+TEST 10: Unsupported or risky document becomes manual_required
+- Simulate unsupported/encrypted/oversized/unreadable input
+- CHECKPOINT: document quality_status='manual_required' with reason [PASS/FAIL]
+- CHECKPOINT: reviewer_notification inserted [PASS/FAIL]
+
+TEST 11: Raw OCR is not persisted or sent downstream
+- Complete OCR for a sample document
+- CHECKPOINT: documents.extracted_json is structured and non-empty [PASS/FAIL]
+- CHECKPOINT: documents.extracted_text is NULL or contains no raw OCR dump [PASS/FAIL]
 
 REPORT: MODULE 4 CHECKPOINT REPORT — N/N passed — PASS/FAIL
 ```
