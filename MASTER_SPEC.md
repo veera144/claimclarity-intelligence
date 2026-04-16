@@ -2070,143 +2070,355 @@ PREREQUISITES:
   Module 5 tests: ALL PASS including HARD GATE benchmark >= 0.70
   Test: findings exist for test case with confidence labels
 
-TASK: Claude API generates plain-language explanations, questions, appeal points,
-      and appeal letter draft. All output is draft — reviewer confirms.
+TASK: OpenAI Responses API generates plain-language explanations, questions,
+      appeal points, and appeal letter draft from Module 5 findings only.
+      All output is draft — reviewer confirms before patient delivery.
 
-MODEL: claude-sonnet-4-20250514
-TEMPERATURE: 0 (deterministic)
-MAX_TOKENS: 4000
+PROVIDER: OpenAI API
+API SURFACE: Responses API
+PRIMARY MODEL: gpt-5.4
+EVALUATED FALLBACK MODEL: gpt-5.4-mini
+FINAL SAFETY FALLBACK: deterministic template-based fallback from KB pattern templates
+TEMPERATURE: 0 or provider-equivalent deterministic setting
+MAX_INPUT_TOKENS: 3500
+MAX_OUTPUT_TOKENS: 2000
+OUTPUT CONTRACT: strict Structured Outputs JSON schema
 
-═══════════════════════════════════════════════════════
+ENV / CONFIG REQUIRED BY MODULE 6:
+  OPENAI_API_KEY=
+  OPENAI_AI_DRAFT_MODEL=gpt-5.4
+  OPENAI_AI_DRAFT_FALLBACK_MODEL=gpt-5.4-mini
+
+Provider configuration must fail fast at processor startup if OPENAI_API_KEY is missing.
+OPENAI_AI_DRAFT_MODEL defaults to gpt-5.4 only when unset in local dev.
+OPENAI_AI_DRAFT_FALLBACK_MODEL defaults to gpt-5.4-mini only when unset in local dev.
+Do not keep legacy non-OpenAI client/config references in Module 6 implementation.
+
+=======================================================
+SCOPE BOUNDARY
+=======================================================
+
+The AI layer explains and drafts from Module 5 findings only.
+
+Allowed input:
+  - case metadata needed for context: insurer_name, case_type, claim_amount_inr
+  - Module 5 finding rows: full finding_id, finding_type, bill_item_label,
+    bill_amount_inr, confidence_label, clause_reference, kb_pattern_id,
+    operative_reason, appeal_strength, appeal_basis
+  - insurer stated reasons already extracted into structured fields
+  - normalized bill summary fields
+  - missing document labels
+
+Forbidden input:
+  - raw OCR text
+  - document.extracted_text
+  - unredacted free-form document bodies
+  - hidden reviewer notes
+  - patient identifiers not needed for drafting
+
+The AI must not decide claim coverage, payout eligibility, fraud, medical necessity,
+legal entitlement, negligence, or statutory breach. It may only explain already-created
+Module 5 findings and draft reviewer-gated questions/appeal language.
+
+=======================================================
 SYSTEM PROMPT (hardcode — version in code comments)
-═══════════════════════════════════════════════════════
+=======================================================
 
-// SYSTEM_PROMPT_VERSION = 'v1.0'
+// SYSTEM_PROMPT_VERSION = 'module6-openai-v1'
 const SYSTEM_PROMPT = `
 You are a claims analyst assistant for ClaimClarity, an India health insurance claim
 clarity service. You assist a qualified human reviewer by generating draft explanations
-and appeal content. ALL your output will be reviewed by a human before the patient sees it.
+and appeal content from structured findings already produced by the rules engine.
+ALL your output will be reviewed by a human before the patient sees it.
 
 YOUR JOB:
 1. Write plain-language explanations for each finding (max 3 sentences, no jargon)
-2. Write specific actionable questions for the hospital (not generic — cite line items)
-3. Write specific actionable questions for the insurer/TPA (cite clauses)
-4. Generate appeal points ranked by strength (must cite clause or pattern basis)
-5. Draft a formal appeal letter
+2. Write specific actionable questions for the hospital (not generic; cite line items)
+3. Write specific actionable questions for the insurer/TPA (cite clauses when present)
+4. Generate appeal points ranked by strength (must cite clause or KB pattern basis)
+5. Draft a formal appeal letter for reviewer editing
 
 HARD RULES — NEVER VIOLATE:
-- Never state a claim will be approved or rejected
-- Never say "the insurer is wrong" or "the hospital overcharged"
-- Never use "you are entitled to" — use "you may want to ask"
-- Never make medical judgments
-- Never use legal language: breach of contract, statutory right, negligence
-- Never assert certainty — use: typically, usually, may, appears to, in most cases
-- If confidence_label is "insufficient_information": write "This item could not be assessed
-  from the available documents. A reviewer will clarify." Do not explain it.
-- If confidence_label is "based_on_typical_policy": end every explanation with
+- Explain Module 5 findings only. Do not create new findings.
+- Preserve every finding_id exactly as provided. Never shorten, transform, or replace it.
+- Never request, infer from, or mention raw OCR text.
+- Never state a claim will be approved, rejected, paid, reimbursed, or denied.
+- Never say or imply final coverage, payout, legal, medical, or fraud conclusions.
+- Never say "the insurer is wrong" or "the hospital overcharged".
+- Never use "you are entitled to"; use "you may want to ask" or equivalent.
+- Never make medical judgments.
+- Never use legal claim language: breach of contract, statutory right, negligence.
+- Never assert certainty; use cautious wording such as typically, usually, may,
+  appears to, or in many policies.
+- If confidence_label is "insufficient_information": write exactly
+  "This item could not be assessed from the available documents. A reviewer will clarify."
+  Do not add any other explanation for that finding.
+- If confidence_label is "based_on_typical_policy": the explanation must say that this
+  is based on a typical policy pattern and must end with
   "Please verify this against your specific policy wording."
-- Every appeal point MUST cite a clause reference or KB pattern basis
-- Appeal letter MUST end with IRDAI Bima Bharosa reference
-- Respond ONLY with valid JSON. No preamble, no markdown fences.
-
-OUTPUT FORMAT (exact JSON schema):
-{
-  "findings_explained": [{"finding_id": "uuid", "plain_language_explanation": "string"}],
-  "hospital_questions": ["string"],
-  "insurer_questions": ["string"],
-  "appeal_points": [{"point": "string", "strength": "strong|moderate|weak", "basis": "string"}],
-  "appeal_letter_draft": "string",
-  "scope_notes": "string"
-}
+- If confidence_label is "clause_found_matched": cite the clause_reference in the
+  explanation when clause_reference is present.
+- Every appeal point MUST cite a clause_reference or KB pattern basis.
+- The appeal_letter_draft MUST include an IRDAI Bima Bharosa reference and the URL
+  "bimabharosa.irdai.gov.in".
+- Respond only through the required strict JSON schema. No preamble, no markdown fences.
 `
 
-═══════════════════════════════════════════════════════
+=======================================================
+STRICT OPENAI STRUCTURED OUTPUTS JSON SCHEMA
+=======================================================
+
+Use OpenAI Responses API with strict Structured Outputs. The schema name is
+claimclarity_ai_draft_response. Set strict=true. additionalProperties must be false
+at every object level. All required fields must be present.
+
+JSON schema:
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "prompt_version",
+    "findings_explained",
+    "hospital_questions",
+    "insurer_questions",
+    "appeal_points",
+    "appeal_letter_draft",
+    "scope_notes"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "module6_ai_draft_v1" },
+    "prompt_version": { "type": "string", "const": "module6-openai-v1" },
+    "findings_explained": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "plain_language_explanation"],
+        "properties": {
+          "finding_id": { "type": "string", "minLength": 1 },
+          "plain_language_explanation": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "hospital_questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "insurer_questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "appeal_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["point", "strength", "basis"],
+        "properties": {
+          "point": { "type": "string", "minLength": 1 },
+          "strength": { "type": "string", "enum": ["strong", "moderate", "weak"] },
+          "basis": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "appeal_letter_draft": { "type": "string", "minLength": 1 },
+    "scope_notes": { "type": "string", "minLength": 1 }
+  }
+}
+
+=======================================================
+SEMANTIC VALIDATION AND SAFETY RULES
+=======================================================
+
+After schema validation, run deterministic semantic validation before storing output:
+
+1. Full finding_id preservation
+   - findings_explained[].finding_id must exactly match the complete finding IDs sent in
+     the prompt.
+   - Every prompted finding must appear exactly once in findings_explained.
+   - Extra, missing, truncated, or transformed finding IDs fail validation.
+
+2. Prompt privacy
+   - Prompt builder must assert that no raw OCR field is included.
+   - Tests must fail if document.extracted_text or OCR-like raw text is passed to the AI layer.
+
+3. Forbidden phrase checks
+   - Reject output containing any case-insensitive variant of:
+     "you are entitled to", "insurer is wrong", "hospital overcharged",
+     "breach of contract", "statutory right", "negligence", "fraud",
+     "will be approved", "will be paid", "guaranteed", "covered for sure".
+
+4. Confidence-label wording rules
+   - insufficient_information findings must use exactly the standard cannot-assess sentence.
+   - based_on_typical_policy explanations must disclose typical-policy basis and end with
+     "Please verify this against your specific policy wording."
+   - clause_found_matched explanations must cite clause_reference when present.
+
+5. Bima Bharosa reference requirement
+   - appeal_letter_draft must include "bimabharosa.irdai.gov.in".
+
+6. No coverage/payout/legal/medical/fraud claims
+   - Reject any output that states or implies final coverage, claim approval/denial,
+     payout certainty, legal liability, medical necessity, or fraud.
+
+Semantic validation failure must not be overridden by reviewer UI. It must trigger fallback.
+
+=======================================================
 AI DRAFT JOB (/apps/processor/src/jobs/aiDraftJob.ts)
-═══════════════════════════════════════════════════════
+=======================================================
 
 Picks up jobs where job_type='ai_draft_generation', status='queued'
 
-Assemble user prompt:
-  Case: {insurer_name}, {case_type}, Claim amount: ₹{claim_amount_inr}
+Assemble user prompt within MAX_INPUT_TOKENS=3500:
+  Case: {insurer_name}, {case_type}, Claim amount: INR {claim_amount_inr}
 
   FINDINGS FROM RULES ENGINE:
-  {findings as numbered list: id, type, bill_item, amount, confidence, clause_reference, operative_reason}
+  {findings as numbered list: full finding_id, finding_type, bill_item_label,
+   bill_amount_inr, confidence_label, clause_reference, kb_pattern_id,
+   operative_reason, appeal_strength, appeal_basis}
 
   INSURER STATED REASONS:
-  {deduction items from insurer letter extraction}
+  {structured deduction items from insurer letter extraction only}
 
   BILL SUMMARY:
-  Total billed: ₹X | Originally approved: ₹Y | Deducted: ₹Z
+  Total billed: INR X | Originally approved: INR Y | Deducted: INR Z
 
   MISSING DOCUMENTS: {list or 'None identified'}
 
-Call Claude API.
-Parse JSON response (strip any accidental markdown fences before JSON.parse).
+Do not include raw OCR text or unstructured document bodies.
+Do not truncate finding_id. Token reduction must remove or shorten descriptive fields,
+never identifiers.
 
-On valid response:
+Call OpenAI Responses API using:
+  provider: OpenAI
+  model: OPENAI_AI_DRAFT_MODEL, initially gpt-5.4
+  strict Structured Outputs JSON schema: claimclarity_ai_draft_response
+  max input tokens: 3500
+  max output tokens: 2000
+
+The lower-cost model OPENAI_AI_DRAFT_FALLBACK_MODEL=gpt-5.4-mini may be used only as
+an evaluated alternative/fallback after it passes the same regression, semantic safety,
+and reviewer acceptance checks. It is not a substitute for deterministic fallback.
+
+On valid OpenAI response:
+  Parse provider response as structured JSON only
+  Validate strict JSON schema
+  Run semantic validation and safety checks
   UPDATE each finding: plain_language_explanation from response
-  UPDATE cases: ai_draft = full response JSONB
+  UPDATE cases: ai_draft = full response JSONB plus provider metadata
   UPDATE cases: status='ai_draft_ready', current_step='awaiting_review'
-  INSERT reviewer_notification: { type:'new_case_assigned', case_id, message:'AI draft ready' }
+  INSERT reviewer_notification: { type:'new_case_assigned', case_id, message:'AI draft ready for review' }
   Mark job completed
+  Log to audit_log: {
+    action:'ai_draft_generated',
+    metadata:{
+      provider:'openai',
+      model,
+      input_tokens,
+      output_tokens,
+      schema_version:'module6_ai_draft_v1',
+      prompt_version:'module6-openai-v1',
+      fallback_reason:null
+    }
+  }
 
-On API failure:
-  Retry once after 60 seconds
-  If still fails: generate template-based fallback from KB pattern templates
-    Set cases.ai_draft with fallback flag: { ..., is_fallback: true }
-    INSERT reviewer_notification noting fallback used
-  Log to audit_log: { action:'ai_draft_generated', metadata:{ model, input_tokens, output_tokens } }
+Fallback triggers:
+  - OpenAI API failure or timeout after one retry
+  - invalid JSON or missing structured output
+  - strict schema validation failure
+  - semantic validation failure
+  - token budget exceeded before API call
+  - evaluated fallback model unavailable or not validated
 
-═══════════════════════════════════════════════════════
+Fallback behavior:
+  1. Retry the primary OpenAI model once after 60 seconds for transient API failure only.
+  2. If configured and validated, try OPENAI_AI_DRAFT_FALLBACK_MODEL once.
+  3. If still not valid, or if the failure is semantic safety/schema/token budget, generate
+     deterministic template-based fallback from KB pattern templates.
+  4. Set cases.ai_draft with fallback flag:
+     { ..., is_fallback:true, fallback_reason:'api_failure|invalid_json|schema_failure|semantic_validation_failure|token_budget_exceeded|fallback_model_unvalidated' }
+  5. INSERT reviewer_notification noting fallback used and reviewer attention required.
+  6. Log audit metadata with provider, model, input_tokens, output_tokens, schema_version,
+     prompt_version, and fallback_reason.
+
+Reviewer gate:
+  AI output and deterministic fallback output remain drafts only.
+  No Module 6 output is patient-visible until Module 7 reviewer approval.
+
+=======================================================
 AI PROMPT REGRESSION TESTS (/apps/processor/tests/aiRegression.ts)
-═══════════════════════════════════════════════════════
+=======================================================
 
-After any system prompt change or KB update, run these:
-  - Feed 3 gold-standard cases through AI layer
-  - Check: no output contains "you are entitled to"
-  - Check: no output contains "insurer is wrong"
-  - Check: no output contains "breach of contract"
-  - Check: every appeal point has a non-empty "basis" field
+After any system prompt change, schema change, provider/model change, or KB update, run these:
+  - Feed 3 gold-standard cases through the AI layer
+  - Check: prompt contains no raw OCR text or document.extracted_text
+  - Check: all finding_id values are preserved in full, exactly once
+  - Check: strict schema validation passes
+  - Check: semantic safety validation passes
+  - Check: no output contains forbidden phrases
+  - Check: no output makes coverage, payout, legal, medical, or fraud claims
+  - Check: confidence-label wording rules are enforced
+  - Check: every appeal point has a non-empty basis field
   - Check: appeal_letter_draft contains "bimabharosa.irdai.gov.in"
-  - Check: findings with insufficient_information are not explained
+  - Check: deterministic fallback produces schema-valid reviewer-gated output
+  - Check: audit log metadata includes provider/model/input_tokens/output_tokens/schema_version/prompt_version/fallback_reason
 
-═══════════════════════════════════════════════════════
+=======================================================
 SELF-VERIFICATION SUITE
-═══════════════════════════════════════════════════════
+=======================================================
 
-TEST 1: Valid JSON output
+TEST 1: OpenAI provider configuration
+- CHECKPOINT: OPENAI_API_KEY is required by fail-fast config [PASS/FAIL]
+- CHECKPOINT: OPENAI_AI_DRAFT_MODEL resolves to gpt-5.4 for pilot [PASS/FAIL]
+- CHECKPOINT: OPENAI_AI_DRAFT_FALLBACK_MODEL resolves to gpt-5.4-mini [PASS/FAIL]
+- CHECKPOINT: no Module 6 legacy non-OpenAI client or model references remain [PASS/FAIL]
+
+TEST 2: Strict Structured Outputs schema
 - Run AI draft job on test case
+- CHECKPOINT: Responses API request uses strict Structured Outputs JSON schema [PASS/FAIL]
 - CHECKPOINT: cases.ai_draft is valid JSON with all required keys [PASS/FAIL]
+- CHECKPOINT: additional properties are rejected [PASS/FAIL]
 
-TEST 2: No red-line violations
-- Parse ai_draft from test case
-- CHECKPOINT: no field contains 'you are entitled to' [PASS/FAIL]
-- CHECKPOINT: no field contains 'insurer is wrong' [PASS/FAIL]
-- CHECKPOINT: appeal_letter_draft contains 'bimabharosa.irdai.gov.in' [PASS/FAIL]
+TEST 3: Prompt privacy and token budget
+- CHECKPOINT: prompt excludes raw OCR text and document.extracted_text [PASS/FAIL]
+- CHECKPOINT: input token budget <= 3500 [PASS/FAIL]
+- CHECKPOINT: output token budget <= 2000 [PASS/FAIL]
+- CHECKPOINT: token_budget_exceeded triggers deterministic fallback before API call [PASS/FAIL]
 
-TEST 3: insufficient_information handled correctly
-- Ensure test case has a finding with confidence='insufficient_information'
-- CHECKPOINT: corresponding finding explanation = the standard cannot-assess message [PASS/FAIL]
+TEST 4: Full finding_id preservation
+- CHECKPOINT: every prompted finding_id appears exactly once in findings_explained [PASS/FAIL]
+- CHECKPOINT: truncated or transformed finding_id fails semantic validation [PASS/FAIL]
 
-TEST 4: Every appeal point has basis
-- CHECKPOINT: all appeal_points[].basis is non-empty string [PASS/FAIL]
+TEST 5: Semantic safety
+- CHECKPOINT: forbidden phrase checks reject unsafe output [PASS/FAIL]
+- CHECKPOINT: confidence-label wording rules pass [PASS/FAIL]
+- CHECKPOINT: appeal_letter_draft contains "bimabharosa.irdai.gov.in" [PASS/FAIL]
+- CHECKPOINT: no coverage/payout/legal/medical/fraud claims appear [PASS/FAIL]
 
-TEST 5: Fallback generates if API unavailable
-- Temporarily set invalid API key
-- Run job
-- CHECKPOINT: cases.ai_draft set with is_fallback:true [PASS/FAIL]
+TEST 6: Fallback paths
+- CHECKPOINT: API failure triggers retry then fallback [PASS/FAIL]
+- CHECKPOINT: invalid JSON triggers fallback [PASS/FAIL]
+- CHECKPOINT: schema failure triggers fallback [PASS/FAIL]
+- CHECKPOINT: semantic validation failure triggers fallback [PASS/FAIL]
+- CHECKPOINT: cases.ai_draft set with is_fallback:true and fallback_reason [PASS/FAIL]
 - CHECKPOINT: reviewer_notification inserted noting fallback [PASS/FAIL]
 
-TEST 6: Status transitions correctly
-- CHECKPOINT: case.status='ai_draft_ready' after job [PASS/FAIL]
+TEST 7: Audit logging
+- CHECKPOINT: audit_log records provider='openai' [PASS/FAIL]
+- CHECKPOINT: audit_log records model, input_tokens, output_tokens [PASS/FAIL]
+- CHECKPOINT: audit_log records schema_version, prompt_version, fallback_reason [PASS/FAIL]
+
+TEST 8: Status transitions and reviewer gate
+- CHECKPOINT: case.status='ai_draft_ready' after valid draft or fallback [PASS/FAIL]
 - CHECKPOINT: case.current_step='awaiting_review' [PASS/FAIL]
-
-TEST 7: Reviewer notification created
 - CHECKPOINT: reviewer_notifications row with type='new_case_assigned' exists [PASS/FAIL]
+- CHECKPOINT: patient-facing report/output remains unavailable until reviewer approval [PASS/FAIL]
 
-TEST 8: Run regression suite
+TEST 9: Run regression suite
 - npx ts-node /apps/processor/tests/aiRegression.ts
-- CHECKPOINT: all 7 regression checks pass [PASS/FAIL]
+- CHECKPOINT: all prompt privacy, schema, semantic safety, fallback, audit logging,
+  and reviewer-gate regression checks pass [PASS/FAIL]
 
 REPORT: MODULE 6 CHECKPOINT REPORT — N/N passed — PASS/FAIL
 ```
