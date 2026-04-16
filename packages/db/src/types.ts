@@ -121,6 +121,8 @@ export type Database = {
         generation_failure_reason: string | null
         payment_waived: boolean
         payment_waived_reason: string | null
+        payment_mode: 'real_payment' | 'test_simulated' | 'waived' | null
+        payment_reporting_category: 'paid' | 'test' | 'waived' | null
         original_approved_inr: number | null
         originally_deducted_inr: number | null
         created_at: string | null

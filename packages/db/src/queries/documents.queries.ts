@@ -2,7 +2,7 @@
  * @file documents.queries.ts
  * @module db/queries/documents
  *
- * Document and processing-job helpers for Module 2 upload and quality checks.
+ * Document and processing-job helpers for upload, quality checks, and OCR.
  *
  * DEPENDENCIES:
  *   - /packages/db/src/types.ts
@@ -10,6 +10,7 @@
  * CALLED BY:
  *   - /apps/web/app/api/cases/[caseId]/documents/route.ts
  *   - /apps/processor/src/jobs/quality-check.ts
+ *   - /apps/processor/src/jobs/ocr-job.ts
  *
  * CALLS:
  *   - Supabase documents, cases, and processing_jobs tables
@@ -35,6 +36,14 @@ export type QualityCheckJob = {
   id: string
   case_id: string
   document_id: string | null
+  attempt_count?: number | null
+  max_attempts?: number | null
+}
+
+export type OcrJob = Required<Pick<QualityCheckJob, 'id' | 'case_id'>> & {
+  document_id: string | null
+  attempt_count: number | null
+  max_attempts: number | null
 }
 
 /**
@@ -79,15 +88,15 @@ export async function listDocumentsForCase(input: {
 export async function queueProcessingJob(input: {
   client: DbClient
   caseId: string
-  documentId: string
-  jobType: 'quality_check' | 'ocr' | 'email_delivery'
+  documentId?: string | null
+  jobType: 'quality_check' | 'ocr' | 'rules_engine' | 'email_delivery'
   idempotencyKey: string
   payload?: Json
 }): Promise<void> {
   const { error } = await input.client.from('processing_jobs').upsert(
     {
       case_id: input.caseId,
-      document_id: input.documentId,
+      document_id: input.documentId ?? null,
       job_type: input.jobType,
       status: 'queued',
       payload: input.payload ?? null,
@@ -119,6 +128,40 @@ export async function listQueuedQualityCheckJobs(input: {
     .from('processing_jobs')
     .select('id, case_id, document_id')
     .eq('job_type', 'quality_check')
+    .eq('status', 'queued')
+    .order('queued_at', { ascending: true })
+
+  if (input.caseId) {
+    query = query.eq('case_id', input.caseId)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data
+}
+
+/**
+ * Lists queued OCR jobs.
+ *
+ * SIDE EFFECTS: reads processing_jobs
+ * THROWS: Error when Supabase rejects the query
+ * IDEMPOTENT: yes, read-only
+ *
+ * @param input - Service-role database client and optional case id
+ * @returns Queued OCR jobs
+ */
+export async function listQueuedOcrJobs(input: {
+  client: DbClient
+  caseId?: string
+}): Promise<OcrJob[]> {
+  let query = input.client
+    .from('processing_jobs')
+    .select('id, case_id, document_id, attempt_count, max_attempts')
+    .eq('job_type', 'ocr')
     .eq('status', 'queued')
     .order('queued_at', { ascending: true })
 
