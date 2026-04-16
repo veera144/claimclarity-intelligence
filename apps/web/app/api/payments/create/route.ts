@@ -77,7 +77,7 @@ export async function POST(request: Request): Promise<Response> {
       throw new AuthorizationError('Case access denied')
     }
 
-    if (caseRow.payment_waived) {
+    if (caseRow.payment_waived || caseRow.payment_mode !== 'real_payment') {
       throw new ValidationError('Payment is waived for this case')
     }
 

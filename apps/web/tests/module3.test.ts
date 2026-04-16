@@ -19,7 +19,7 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { createHmac, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -46,6 +46,11 @@ type CheckpointName =
   | 'invalid_webhook_no_db_changes'
   | 'full_refund_updates_payment'
   | 'full_refund_closes_case'
+  | 'admin_waiver_no_razorpay_rows'
+  | 'internal_code_invalid_rejected'
+  | 'internal_code_activates_no_payment'
+  | 'test_simulated_activates_no_payment'
+  | 'payment_control_audit_logged'
 
 type CheckpointResult = {
   pass: boolean
@@ -92,6 +97,8 @@ type CaseStatusRead = {
   status: string
   current_step: string | null
   sla_deadline: string | null
+  payment_mode: string
+  payment_reporting_category: string
 }
 
 type PaymentRead = {
@@ -111,6 +118,11 @@ const CHECKPOINTS: readonly CheckpointName[] = [
   'invalid_webhook_no_db_changes',
   'full_refund_updates_payment',
   'full_refund_closes_case',
+  'admin_waiver_no_razorpay_rows',
+  'internal_code_invalid_rejected',
+  'internal_code_activates_no_payment',
+  'test_simulated_activates_no_payment',
+  'payment_control_audit_logged',
 ]
 
 const MODULE3_TEST_PORT = 3103
@@ -119,6 +131,7 @@ const SERVER_START_TIMEOUT_MS = 90_000
 const SERVER_POLL_MS = 750
 const TEST_PASSWORD = 'Module3-test-password-12345'
 const SLA_TOLERANCE_MINUTES = 5
+const INTERNAL_ACCESS_CODE = 'module3-internal-access-code'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
@@ -472,6 +485,13 @@ async function createTestCase(input: {
       intake_channel: 'patient_web',
       status: 'payment_pending',
       payment_waived: input.paymentWaived ?? false,
+      ...(input.paymentWaived
+        ? {
+            payment_waived_reason: 'module3_test_waived',
+            payment_mode: 'admin_waived',
+            payment_reporting_category: 'waived',
+          }
+        : {}),
     })
     .select('id, case_ref')
     .single()
@@ -587,7 +607,7 @@ async function countOcrJobs(serviceClient: DbClient, caseId: string): Promise<nu
 async function readCaseStatus(serviceClient: DbClient, caseId: string): Promise<CaseStatusRead> {
   const { data, error } = await serviceClient
     .from('cases')
-    .select('status, current_step, sla_deadline')
+    .select('status, current_step, sla_deadline, payment_mode, payment_reporting_category')
     .eq('id', caseId)
     .single()
 
@@ -620,6 +640,10 @@ function checkoutSignature(orderId: string, paymentId: string): string {
 
 function webhookSignature(rawBody: string): string {
   return createHmac('sha256', requireEnv('RAZORPAY_WEBHOOK_SECRET')).update(rawBody).digest('hex')
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex')
 }
 
 async function postCreatePayment(server: WebServer, user: TestUser, caseId: string): Promise<Response> {
@@ -680,6 +704,39 @@ async function postFullRefund(input: {
     },
     body: JSON.stringify({ reason: 'sla_breach', refundType: 'full' }),
   })
+}
+
+async function postPaymentControl(input: {
+  server: WebServer
+  user: TestUser
+  body: Record<string, unknown>
+}): Promise<Response> {
+  return fetchWithTimeout(`${input.server.baseUrl}/api/payments/controls`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      cookie: input.user.cookieHeader,
+    },
+    body: JSON.stringify(input.body),
+  })
+}
+
+async function countAuditRows(input: {
+  serviceClient: DbClient
+  action: string
+  caseId: string
+}): Promise<number> {
+  const { count, error } = await input.serviceClient
+    .from('audit_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', input.action)
+    .eq('entity_id', input.caseId)
+
+  if (error) {
+    throw new Error(`Unable to count audit rows: ${error.message}`)
+  }
+
+  return count ?? 0
 }
 
 async function checkpointWaivedOrderBlocked(input: {
@@ -1036,6 +1093,217 @@ async function runFullRefundCheckpoints(input: {
   }
 }
 
+async function checkpointAdminWaiverNoRazorpayRows(input: {
+  serviceClient: DbClient
+  server: WebServer
+  razorpay: RazorpayMockServer
+}): Promise<void> {
+  const patient = await createTestUser(input.serviceClient, 'admin-waive-patient')
+  const admin = await createTestUser(input.serviceClient, 'admin-waive-admin', 'admin')
+  let testCase: TestCase | null = null
+
+  try {
+    testCase = await createTestCase({
+      serviceClient: input.serviceClient,
+      userId: patient.id,
+      label: 'adminwaive',
+    })
+    await createCaseDocuments(input.serviceClient, testCase.id)
+
+    const ordersBefore = input.razorpay.getOrderRequests()
+    const response = await postPaymentControl({
+      server: input.server,
+      user: admin,
+      body: {
+        caseId: testCase.id,
+        mode: 'admin_waived',
+        reason: 'module3_checkpoint',
+      },
+    })
+    const paymentCount = await countPaymentsForCase(input.serviceClient, testCase.id)
+    const caseStatus = await readCaseStatus(input.serviceClient, testCase.id)
+
+    assertCondition(response.ok, `Expected admin waiver success, got ${String(response.status)}`)
+    assertCondition(
+      input.razorpay.getOrderRequests() === ordersBefore,
+      'Admin waiver unexpectedly called Razorpay'
+    )
+    assertCondition(paymentCount === 0, `Expected 0 payment rows, got ${String(paymentCount)}`)
+    assertCondition(caseStatus.status === 'processing', `Expected processing, got ${caseStatus.status}`)
+    assertCondition(
+      caseStatus.payment_mode === 'admin_waived',
+      `Expected admin_waived, got ${caseStatus.payment_mode}`
+    )
+    assertCondition(
+      caseStatus.payment_reporting_category === 'waived',
+      `Expected waived, got ${caseStatus.payment_reporting_category}`
+    )
+  } finally {
+    if (testCase) {
+      await cleanupCase(input.serviceClient, testCase.id)
+    }
+    await cleanupUser(input.serviceClient, patient)
+    await cleanupUser(input.serviceClient, admin)
+  }
+}
+
+async function runInternalAccessCodeCheckpoints(input: {
+  serviceClient: DbClient
+  server: WebServer
+  razorpay: RazorpayMockServer
+  results: Partial<Record<CheckpointName, CheckpointResult>>
+}): Promise<void> {
+  const user = await createTestUser(input.serviceClient, 'internal-code')
+  let invalidCase: TestCase | null = null
+  let validCase: TestCase | null = null
+
+  try {
+    invalidCase = await createTestCase({
+      serviceClient: input.serviceClient,
+      userId: user.id,
+      label: 'codebad',
+    })
+    await createCaseDocuments(input.serviceClient, invalidCase.id)
+    const invalidResponse = await postPaymentControl({
+      server: input.server,
+      user,
+      body: {
+        caseId: invalidCase.id,
+        mode: 'internal_access_code',
+        accessCode: 'wrong-code',
+      },
+    })
+
+    await runCheckpoint('internal_code_invalid_rejected', input.results, async () => {
+      const caseStatus = await readCaseStatus(input.serviceClient, invalidCase!.id)
+      const paymentCount = await countPaymentsForCase(input.serviceClient, invalidCase!.id)
+      assertCondition(
+        invalidResponse.status === 403,
+        `Expected 403, got ${String(invalidResponse.status)}`
+      )
+      assertCondition(
+        caseStatus.status === 'payment_pending',
+        `Expected payment_pending, got ${caseStatus.status}`
+      )
+      assertCondition(paymentCount === 0, `Expected 0 payment rows, got ${String(paymentCount)}`)
+    })
+
+    validCase = await createTestCase({
+      serviceClient: input.serviceClient,
+      userId: user.id,
+      label: 'codeok',
+    })
+    await createCaseDocuments(input.serviceClient, validCase.id)
+    const ordersBefore = input.razorpay.getOrderRequests()
+    const validResponse = await postPaymentControl({
+      server: input.server,
+      user,
+      body: {
+        caseId: validCase.id,
+        mode: 'internal_access_code',
+        accessCode: INTERNAL_ACCESS_CODE,
+      },
+    })
+
+    await runCheckpoint('internal_code_activates_no_payment', input.results, async () => {
+      const caseStatus = await readCaseStatus(input.serviceClient, validCase!.id)
+      const paymentCount = await countPaymentsForCase(input.serviceClient, validCase!.id)
+      assertCondition(validResponse.ok, `Expected success, got ${String(validResponse.status)}`)
+      assertCondition(
+        input.razorpay.getOrderRequests() === ordersBefore,
+        'Internal access code unexpectedly called Razorpay'
+      )
+      assertCondition(paymentCount === 0, `Expected 0 payment rows, got ${String(paymentCount)}`)
+      assertCondition(
+        caseStatus.payment_mode === 'internal_access_code',
+        `Expected internal_access_code, got ${caseStatus.payment_mode}`
+      )
+      assertCondition(
+        caseStatus.payment_reporting_category === 'waived',
+        `Expected waived, got ${caseStatus.payment_reporting_category}`
+      )
+      assertCondition(
+        caseStatus.status === 'processing',
+        `Expected processing, got ${caseStatus.status}`
+      )
+    })
+
+    await runCheckpoint('payment_control_audit_logged', input.results, async () => {
+      const failedAuditCount = await countAuditRows({
+        serviceClient: input.serviceClient,
+        action: 'payment_internal_access_code_failed',
+        caseId: invalidCase!.id,
+      })
+      const successAuditCount = await countAuditRows({
+        serviceClient: input.serviceClient,
+        action: 'payment_internal_access_code_redeemed',
+        caseId: validCase!.id,
+      })
+      assertCondition(failedAuditCount > 0, 'Missing failed internal access-code audit row')
+      assertCondition(successAuditCount > 0, 'Missing successful internal access-code audit row')
+    })
+  } finally {
+    if (invalidCase) {
+      await cleanupCase(input.serviceClient, invalidCase.id)
+    }
+    if (validCase) {
+      await cleanupCase(input.serviceClient, validCase.id)
+    }
+    await cleanupUser(input.serviceClient, user)
+  }
+}
+
+async function checkpointTestSimulatedActivatesNoPayment(input: {
+  serviceClient: DbClient
+  server: WebServer
+  razorpay: RazorpayMockServer
+}): Promise<void> {
+  const user = await createTestUser(input.serviceClient, 'test-simulated')
+  let testCase: TestCase | null = null
+
+  try {
+    testCase = await createTestCase({
+      serviceClient: input.serviceClient,
+      userId: user.id,
+      label: 'testsim',
+    })
+    await createCaseDocuments(input.serviceClient, testCase.id)
+
+    const ordersBefore = input.razorpay.getOrderRequests()
+    const response = await postPaymentControl({
+      server: input.server,
+      user,
+      body: {
+        caseId: testCase.id,
+        mode: 'test_simulated',
+      },
+    })
+    const paymentCount = await countPaymentsForCase(input.serviceClient, testCase.id)
+    const caseStatus = await readCaseStatus(input.serviceClient, testCase.id)
+
+    assertCondition(response.ok, `Expected success, got ${String(response.status)}`)
+    assertCondition(
+      input.razorpay.getOrderRequests() === ordersBefore,
+      'Test simulation unexpectedly called Razorpay'
+    )
+    assertCondition(paymentCount === 0, `Expected 0 payment rows, got ${String(paymentCount)}`)
+    assertCondition(
+      caseStatus.payment_mode === 'test_simulated',
+      `Expected test_simulated, got ${caseStatus.payment_mode}`
+    )
+    assertCondition(
+      caseStatus.payment_reporting_category === 'test',
+      `Expected test, got ${caseStatus.payment_reporting_category}`
+    )
+    assertCondition(caseStatus.status === 'processing', `Expected processing, got ${caseStatus.status}`)
+  } finally {
+    if (testCase) {
+      await cleanupCase(input.serviceClient, testCase.id)
+    }
+    await cleanupUser(input.serviceClient, user)
+  }
+}
+
 async function runCheckpoint(
   name: CheckpointName,
   results: Partial<Record<CheckpointName, CheckpointResult>>,
@@ -1075,6 +1343,8 @@ function printReport(results: Partial<Record<CheckpointName, CheckpointResult>>)
 
 async function main(): Promise<void> {
   loadRootEnv()
+  process.env.INTERNAL_ACCESS_CODE_SHA256_HASHES = sha256Hex(INTERNAL_ACCESS_CODE)
+  process.env.ALLOW_TEST_SIMULATED_PAYMENTS = 'true'
 
   const serviceClient = makeServiceClient()
   const razorpay = await startRazorpayMockServer()
@@ -1097,6 +1367,13 @@ async function main(): Promise<void> {
       checkpointInvalidWebhookNoDbChanges({ serviceClient, server })
     )
     await runFullRefundCheckpoints({ serviceClient, server, razorpay, results })
+    await runCheckpoint('admin_waiver_no_razorpay_rows', results, () =>
+      checkpointAdminWaiverNoRazorpayRows({ serviceClient, server, razorpay })
+    )
+    await runInternalAccessCodeCheckpoints({ serviceClient, server, razorpay, results })
+    await runCheckpoint('test_simulated_activates_no_payment', results, () =>
+      checkpointTestSimulatedActivatesNoPayment({ serviceClient, server, razorpay })
+    )
   } finally {
     stopWebServer(server)
     await razorpay.close()
