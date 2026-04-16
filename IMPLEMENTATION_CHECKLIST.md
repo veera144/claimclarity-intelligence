@@ -15,7 +15,7 @@ Status legend:
 | 2 | Document Upload and Quality Check | DONE | PASS | Live case_ref RPC dependency resolved; /api/cases verified against live DB; lint, typecheck, and Module 2 checkpoints passed 8/8. |
 | 3 | Payment Integration | DONE | PASS | Module 3 checkpoints passed 11/11; web/dashboard build compatibility restored; cross-module verification through Module 3 passed. |
 | 4 | OCR and Extraction Pipeline | DONE | PASS | Module 4 checkpoints passed 12/12; live Textract smoke remains pending until AWS account activation, with fallback-first production path reviewed. |
-| 5 | Rules Engine and Knowledge Base | IN PROGRESS |  | Opened after Module 4 PASS; prerequisites satisfied by rules_engine handoff checkpoint with usable extracted_json. |
+| 5 | Rules Engine and Knowledge Base | READY FOR REVIEW |  | Module 5 implemented; lint, typecheck, and checkpoints passed 12/12 including benchmark hard gate. Awaiting reviewer sign-off. |
 | 6 | AI Explanation Layer | NOT STARTED |  |  |
 | 7 | Reviewer Dashboard | NOT STARTED |  |  |
 | 8 | Report Generation and Delivery | NOT STARTED |  |  |

@@ -1,0 +1,137 @@
+[
+  {
+    "caseId": "test-001",
+    "documents": {
+      "bill": [
+        {
+          "line_item": "Room Charges",
+          "total_inr": 500000,
+          "bill_category": "room_charges",
+          "page_number": 1
+        },
+        {
+          "line_item": "Pharmacy Medicines",
+          "total_inr": 120000,
+          "bill_category": "pharmacy",
+          "page_number": 1
+        }
+      ],
+      "policyChunks": [
+        {
+          "heading": "ROOM RENT",
+          "clause_category": "room_rent",
+          "text": "Room rent is covered up to the policy sub-limit per day.",
+          "page_number": 3
+        },
+        {
+          "heading": "PHARMACY",
+          "clause_category": "pharmacy_sublimit",
+          "text": "Pharmacy and medicine charges are subject to package and sub-limit terms.",
+          "page_number": 5
+        }
+      ],
+      "insurerDeductions": [
+        {
+          "item_description": "Room Charge",
+          "deducted_amount_inr": 1000,
+          "stated_reason": "Room rent exceeds sub-limit and accommodation cap."
+        },
+        {
+          "item_description": "Pharmacy Medicine",
+          "deducted_amount_inr": 300,
+          "stated_reason": "Pharmacy medicine sub-limit applied."
+        }
+      ]
+    },
+    "expectedFindings": [
+      {
+        "bill_line_item": "Room Charges",
+        "expected_finding_type": "deducted",
+        "expected_confidence": "based_on_typical_policy",
+        "expected_clause_category": "room_rent"
+      },
+      {
+        "bill_line_item": "Pharmacy Medicines",
+        "expected_finding_type": "deducted",
+        "expected_confidence": "based_on_typical_policy",
+        "expected_clause_category": "pharmacy_sublimit"
+      }
+    ]
+  },
+  {
+    "caseId": "test-002",
+    "documents": {
+      "bill": [
+        {
+          "line_item": "Disposable Consumables",
+          "total_inr": 80000,
+          "bill_category": "consumables",
+          "page_number": 1
+        },
+        {
+          "line_item": "Visiting Doctor Fee",
+          "total_inr": 150000,
+          "bill_category": "doctor_fees",
+          "page_number": 1
+        }
+      ],
+      "policyChunks": [
+        {
+          "heading": "NON MEDICAL EXPENSES",
+          "clause_category": "non_medical_expenses",
+          "text": "Consumable and disposable expenses may be excluded.",
+          "page_number": 6
+        }
+      ],
+      "insurerDeductions": [
+        {
+          "item_description": "Disposable Consumable",
+          "deducted_amount_inr": 800,
+          "stated_reason": "Disposable consumable non-medical expense."
+        },
+        {
+          "item_description": "Visiting Doctor Fee",
+          "deducted_amount_inr": 500,
+          "stated_reason": "Visiting doctor specialist consultant fee requires support."
+        }
+      ]
+    },
+    "expectedFindings": [
+      {
+        "bill_line_item": "Disposable Consumables",
+        "expected_finding_type": "deducted",
+        "expected_confidence": "based_on_typical_policy",
+        "expected_clause_category": "non_medical_expenses"
+      },
+      {
+        "bill_line_item": "Visiting Doctor Fee",
+        "expected_finding_type": "deducted",
+        "expected_confidence": "based_on_typical_policy",
+        "expected_clause_category": "specialist_consultation"
+      }
+    ]
+  },
+  {
+    "caseId": "test-003",
+    "documents": {
+      "bill": [
+        {
+          "line_item": "Parking charges",
+          "total_inr": 20000,
+          "bill_category": "miscellaneous",
+          "page_number": 1
+        }
+      ],
+      "policyChunks": [],
+      "insurerDeductions": []
+    },
+    "expectedFindings": [
+      {
+        "bill_line_item": "Parking charges",
+        "expected_finding_type": "covered",
+        "expected_confidence": "insufficient_information",
+        "expected_clause_category": "none"
+      }
+    ]
+  }
+]

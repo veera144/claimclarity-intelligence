@@ -89,7 +89,7 @@ export async function queueProcessingJob(input: {
   client: DbClient
   caseId: string
   documentId?: string | null
-  jobType: 'quality_check' | 'ocr' | 'rules_engine' | 'email_delivery'
+  jobType: 'quality_check' | 'ocr' | 'rules_engine' | 'ai_draft_generation' | 'email_delivery'
   idempotencyKey: string
   payload?: Json
 }): Promise<void> {
