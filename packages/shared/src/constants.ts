@@ -52,4 +52,8 @@ export const RUPEES_PER_PAISE = 100
 export const AI_MAX_INPUT_TOKENS = 3500
 export const AI_MAX_OUTPUT_TOKENS = 2000
 export const AI_INPUT_WARN_THRESHOLD = 3000
+export const AI_DRAFT_SCHEMA_VERSION = 'module6_ai_draft_v1'
+export const AI_DRAFT_PROMPT_VERSION = 'module6-openai-v1'
+export const OPENAI_AI_DRAFT_DEFAULT_MODEL = 'gpt-5.4'
+export const OPENAI_AI_DRAFT_DEFAULT_FALLBACK_MODEL = 'gpt-5.4-mini'
 

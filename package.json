@@ -11,6 +11,8 @@
     "test:module3": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/web/tests/module3.test.ts",
     "test:module4": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module4.test.ts",
     "test:module5": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module5.test.ts",
+    "test:module6": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module6.test.ts",
+    "test:ai-regression": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/aiRegression.ts",
     "smoke:textract": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module4-live-textract-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
