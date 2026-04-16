@@ -9,6 +9,8 @@
     "test:module1": "node --loader ts-node/esm apps/web/tests/module1.test.ts",
     "test:module2": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/web/tests/module2.test.ts",
     "test:module3": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/web/tests/module3.test.ts",
+    "test:module4": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module4.test.ts",
+    "smoke:textract": "node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node apps/processor/tests/module4-live-textract-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "simple-git-hooks": {
