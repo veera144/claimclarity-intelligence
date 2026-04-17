@@ -176,6 +176,10 @@ export type Database = {
         reviewer_confirmed: boolean | null
         reviewer_confirmed_by: string | null
         reviewer_confirmed_at: string | null
+        reviewer_unassessable: boolean | null
+        reviewer_unassessable_reason: string | null
+        reviewer_unassessable_by: string | null
+        reviewer_unassessable_at: string | null
         reviewer_edited: boolean | null
         expert_confirmed: boolean | null
         expert_confirmed_by: string | null

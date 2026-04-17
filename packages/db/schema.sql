@@ -199,6 +199,10 @@ CREATE TABLE findings (
   reviewer_confirmed         BOOLEAN DEFAULT FALSE,
   reviewer_confirmed_by      UUID REFERENCES users(id),
   reviewer_confirmed_at      TIMESTAMPTZ,
+  reviewer_unassessable      BOOLEAN DEFAULT FALSE,
+  reviewer_unassessable_reason TEXT,
+  reviewer_unassessable_by   UUID REFERENCES users(id),
+  reviewer_unassessable_at   TIMESTAMPTZ,
   reviewer_edited            BOOLEAN DEFAULT FALSE,
   expert_confirmed           BOOLEAN DEFAULT FALSE,
   expert_confirmed_by        UUID REFERENCES users(id),
@@ -487,6 +491,8 @@ CREATE INDEX idx_docs_ocr              ON documents(ocr_status) WHERE ocr_status
 CREATE INDEX idx_findings_case         ON findings(case_id);
 CREATE INDEX idx_findings_type         ON findings(case_id, finding_type);
 CREATE INDEX idx_findings_unconfirmed  ON findings(case_id) WHERE reviewer_confirmed = FALSE;
+CREATE INDEX idx_findings_pending_review ON findings(case_id)
+  WHERE reviewer_confirmed = FALSE AND reviewer_unassessable = FALSE;
 CREATE INDEX idx_escalations_case      ON escalations(case_id);
 CREATE INDEX idx_escalations_open      ON escalations(to_expert_id, status) WHERE status = 'open';
 CREATE INDEX idx_jobs_case             ON processing_jobs(case_id);
@@ -607,10 +613,21 @@ CREATE POLICY findings_expert      ON findings FOR SELECT USING (
   )
 );
 CREATE POLICY findings_admin       ON findings FOR ALL USING (is_admin());
-CREATE POLICY escalations_rev    ON escalations FOR ALL USING (from_reviewer_id = auth.uid());
-CREATE POLICY escalations_exp    ON escalations FOR ALL USING (
-  to_expert_id = auth.uid() OR is_admin()
-);
+CREATE POLICY escalations_reviewer_select ON escalations
+  FOR SELECT USING ((from_reviewer_id = auth.uid() AND is_reviewer()) OR is_admin());
+CREATE POLICY escalations_reviewer_insert ON escalations
+  FOR INSERT WITH CHECK (from_reviewer_id = auth.uid() AND is_reviewer());
+CREATE POLICY escalations_expert_select_open ON escalations
+  FOR SELECT USING (to_expert_id = auth.uid() AND is_expert() AND status = 'open');
+CREATE POLICY escalations_expert_update_open ON escalations
+  FOR UPDATE USING (to_expert_id = auth.uid() AND is_expert() AND status = 'open')
+  WITH CHECK (
+    to_expert_id = auth.uid()
+    AND is_expert()
+    AND status IN ('accepted','responded','resolved','dismissed')
+  );
+CREATE POLICY escalations_admin_all ON escalations
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 CREATE POLICY jobs_admin_read    ON processing_jobs FOR SELECT USING (is_admin());
 CREATE POLICY reports_patient    ON reports FOR SELECT USING (
   delivered_at IS NOT NULL AND
