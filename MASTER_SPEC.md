@@ -536,8 +536,13 @@ CREATE TABLE outcomes (
     ) STORED,
 
   outcome_type                TEXT CHECK (outcome_type IN (
-                                'full_reversal','partial_reversal','no_change','pending','not_applicable'
+                                'pending','not_applicable','no_change','partial_reversal','full_reversal'
                               )),
+  patient_action_type         TEXT NOT NULL DEFAULT 'none'
+                                CHECK (patient_action_type IN (
+                                  'none','asked_hospital','asked_insurer_tpa',
+                                  'submitted_appeal','waiting_response','closed_no_benefit'
+                                )),
   report_used_in_appeal       BOOLEAN,
 
   -- Evidence quality
@@ -567,22 +572,26 @@ COMMENT ON COLUMN outcomes.reversal_amount_inr IS
   'Generated: final_settled - original_approved. Positive = patient recovered money. WHOLE RUPEES.';
 COMMENT ON COLUMN outcomes.original_approved_inr IS
   'Copied from cases.original_approved_inr at outcome creation. WHOLE RUPEES.';
+COMMENT ON COLUMN outcomes.outcome_type IS
+  'Result/financial state only: pending, not_applicable, no_change, partial_reversal, full_reversal.';
+COMMENT ON COLUMN outcomes.patient_action_type IS
+  'Patient-reported action state only. Do not force workflow/action states into outcome_type.';
 
 -- OUTCOME TOKENS (one-time links for email-based outcome updates)
 CREATE TABLE outcome_tokens (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id          UUID NOT NULL REFERENCES cases(id),
   token_hash       TEXT NOT NULL UNIQUE,
-  action_type      TEXT NOT NULL CHECK (action_type IN (
-                     'quick_update_submitted','quick_update_not_yet','quick_update_no_appeal',
-                     'quick_update_paid_more','quick_update_rejected','quick_update_waiting',
-                     'quick_update_resolved','quick_update_no_change','quick_update_moved_on',
-                     'full_outcome_form'
-                   )),
+  token_type       TEXT NOT NULL CHECK (token_type IN ('quick_update','full_outcome')),
   expires_at       TIMESTAMPTZ NOT NULL,
   used_at          TIMESTAMPTZ,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+COMMENT ON COLUMN outcome_tokens.token_hash IS
+  'SHA-256 hash of opaque token. Raw token is never stored.';
+COMMENT ON COLUMN outcome_tokens.token_type IS
+  'Authorization scope only: quick_update or full_outcome. Actual submitted action belongs in POST body.';
 
 -- FOLLOW-UP SCHEDULE
 CREATE TABLE follow_up_schedule (
@@ -2768,6 +2777,22 @@ NOTE ON MONEY UNITS IN THIS MODULE:
   outcomes.reversal_amount_inr = GENERATED COLUMN (final_settled - original_approved)
   DO NOT divide by 100 in any display or analytics query. Store and display in ₹.
 
+STATE MODEL:
+  outcome_type is only the result/financial state:
+    pending | not_applicable | no_change | partial_reversal | full_reversal
+  patient_action_type is only the patient action state:
+    none | asked_hospital | asked_insurer_tpa | submitted_appeal | waiting_response | closed_no_benefit
+  Do not force product workflow states into outcome_type.
+  Product outcome analytics derive action, recovery, and helpfulness from both fields.
+
+TOKEN MODEL:
+  outcome_tokens.token_type is only the authorization scope:
+    quick_update | full_outcome
+  The actual submitted action is sent in the POST body.
+  Any action query parameter on a GET link is only for confirmation display/preselection.
+  Tokens are opaque, SHA-256 hashed in DB, single-use, and expire after 7 days.
+  GET confirmation pages may verify that a token can render the page, but MUST NOT mutate the DB.
+
 ═══════════════════════════════════════════════════════
 1. FOLLOW-UP EMAILS WITH ONE-CLICK BUTTONS
 ═══════════════════════════════════════════════════════
@@ -2797,7 +2822,7 @@ Body:
   │  💰 Yes, paid more        │  │  ✗ Rejected      │  │  ⏳ Still waiting │
   └───────────────────────────┘  └─────────────────┘  └──────────────────┘
 
-  If resolved — tell us the amount: {outcome_page_url}
+  If resolved — tell us the amount: {tokenized_outcome_page_url}
 
 EMAIL 3 (Day 90) — final:
 
@@ -2809,13 +2834,16 @@ Body:
   └──────────────────────────┘  └──────────────────┘  └─────────────────┘
 
 Quick-update flow:
-  1. Email button opens GET /outcomes/{caseRef}/quick-update?token={opaqueToken}
-  2. Server validates token against outcome_tokens (unused, unexpired, matching caseRef)
+  1. Email button opens GET /app/outcomes/update?token={opaqueToken}&action={submittedAction}
+  2. Server performs a non-mutating token check against outcome_tokens
+     (unused, unexpired, token_type='quick_update')
   3. Page renders a confirmation card
-  4. User confirms → POST /api/outcomes/{caseRef}/quick-update with token
-  5. Server marks outcome_tokens.used_at=NOW(), updates the single field, returns thank-you page
+  4. User confirms → POST /api/outcomes/quick-update with { token, action }
+  5. Server validates and consumes the token, sets outcome_tokens.used_at=NOW(),
+     applies the submitted action from the POST body, and returns thank-you page
 
 The actual database update MUST only happen on POST after token validation.
+Raw caseRef MUST NOT authorize quick updates.
 
 ═══════════════════════════════════════════════════════
 2. OUTCOME PAGE (/app/outcomes/[caseRef]/page.tsx)
@@ -2830,17 +2858,25 @@ Case ref alone is NEVER sufficient to update outcomes.
 SCREEN 1: Did you appeal?
   Radio: [Yes, I submitted] [Not yet — I'll update later] [Decided not to]
 
-  If "Decided not to" → skip to Screen 4 (satisfaction)
-  If "Not yet" → thank you, send reminder in 30 days
-  If "Yes" → Screen 2
+  If "Decided not to" → patient_action_type='closed_no_benefit',
+      outcome_type='not_applicable', skip to Screen 4 (satisfaction)
+  If "Not yet" → patient_action_type='none', outcome_type='pending',
+      thank you, send reminder in 30 days
+  If "Yes" → patient_action_type='submitted_appeal', Screen 2
 
 SCREEN 2: Did the insurer respond?
   Radio: [Yes] [Still waiting]
-  If waiting → thank you, send reminder
+  If waiting → patient_action_type='waiting_response', outcome_type='pending',
+      thank you, send reminder
   If yes → Screen 3
 
 SCREEN 3: What was the outcome?
   Radio: [They paid more than before] [Same as before / rejected] [Partial improvement]
+
+  Map the answer to outcome_type:
+    They paid more than before → full_reversal or partial_reversal based on amount/original deduction
+    Same as before / rejected → no_change
+    Partial improvement → partial_reversal
 
   If paid more or partial:
     ₹ field: "How much more did you receive? (Optional — even an estimate helps)"
@@ -2875,6 +2911,7 @@ POST — authenticated patient session OR valid one-time token from outcome_toke
 Body:
 {
   appealSubmitted: boolean,
+  patientActionType?: string,
   insurerResponded?: boolean,
   finalSettledAmountInr?: number,   -- WHOLE RUPEES input from user
   outcomeType?: string,
@@ -2885,7 +2922,12 @@ Body:
 }
 
 Server:
-- If request uses token path: validate token_hash, expires_at, used_at; mark used_at=NOW() on success
+- Accept either authenticated patient session ownership or a valid one-time token.
+  Raw caseRef alone is never authorization.
+- If request uses token path: validate token_hash, expires_at, used_at, and token_type;
+  mark used_at=NOW() on successful POST only.
+- If token_type='quick_update', require action in POST body and map it to patient_action_type
+  and/or outcome_type. Do not derive the submitted action from token_type.
 - UPSERT outcomes (unique on case_id)
 - Set evidence_type based on evidenceStoragePath presence:
     evidenceStoragePath ? 'document_verified' : 'self_reported'
@@ -2901,18 +2943,40 @@ Server:
 4. OUTCOME ANALYTICS (Metabase SQL — correct units)
 ═══════════════════════════════════════════════════════
 
+Outcome analytics are product outcome metrics only. Keep them separate from
+revenue/payment analytics and do not join to payments for recovery or usefulness metrics.
+
 -- Core metric: money recovered (WHOLE RUPEES — NO division by 100)
 SELECT
-  COUNT(*) FILTER (WHERE appeal_submitted = TRUE) AS total_appeals,
+  COUNT(*) FILTER (
+    WHERE patient_action_type IN (
+      'asked_hospital','asked_insurer_tpa','submitted_appeal','waiting_response'
+    )
+  ) AS total_patient_actions,
   COUNT(*) FILTER (WHERE outcome_type IN ('full_reversal','partial_reversal')) AS reversals,
   ROUND(
     COUNT(*) FILTER (WHERE outcome_type IN ('full_reversal','partial_reversal')) * 100.0
-    / NULLIF(COUNT(*) FILTER (WHERE appeal_submitted = TRUE), 0), 1
+    / NULLIF(COUNT(*) FILTER (
+        WHERE patient_action_type IN (
+          'asked_hospital','asked_insurer_tpa','submitted_appeal','waiting_response'
+        )
+      ), 0), 1
   ) AS reversal_rate_pct,
   SUM(reversal_amount_inr) FILTER (WHERE reversal_amount_inr > 0) AS total_recovered_inr,
   ROUND(AVG(reversal_amount_inr) FILTER (WHERE reversal_amount_inr > 0), 0) AS avg_recovery_inr
 FROM outcomes
 WHERE outcome_type IS NOT NULL AND outcome_type != 'pending';
+
+-- Product usefulness combines action, recovery, and helpfulness
+SELECT
+  patient_action_type,
+  outcome_type,
+  COUNT(*) AS cases,
+  SUM(reversal_amount_inr) FILTER (WHERE reversal_amount_inr > 0) AS recovered_inr,
+  AVG(user_satisfaction) AS avg_helpfulness
+FROM outcomes
+WHERE collected_at IS NOT NULL
+GROUP BY patient_action_type, outcome_type;
 
 -- Evidence quality breakdown
 SELECT evidence_type, COUNT(*), AVG(user_satisfaction)
@@ -2939,8 +3003,11 @@ SELF-VERIFICATION SUITE
 ═══════════════════════════════════════════════════════
 
 TEST 1: Quick-update endpoint works without full form
-- GET /api/outcomes/{caseRef}/quick-update?submitted=true
-- CHECKPOINT: outcomes.appeal_submitted=TRUE [PASS/FAIL]
+- GET /app/outcomes/update?token={opaqueToken}&action=submitted_appeal renders confirmation only
+- CHECKPOINT: GET does not change outcomes or outcome_tokens.used_at [PASS/FAIL]
+- POST /api/outcomes/quick-update with { token, action:'submitted_appeal' }
+- CHECKPOINT: outcomes.patient_action_type='submitted_appeal' [PASS/FAIL]
+- CHECKPOINT: outcome_tokens.used_at is set after POST [PASS/FAIL]
 - CHECKPOINT: returns HTML thank-you page [PASS/FAIL]
 
 TEST 2: Reversal amount is auto-calculated
@@ -3888,7 +3955,7 @@ CREATE TABLE outcome_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id     UUID NOT NULL REFERENCES cases(id),
   token_hash  TEXT NOT NULL UNIQUE,  -- SHA-256 hash of the opaque token
-  action_type TEXT NOT NULL CHECK (action_type IN ('quick_update', 'full_outcome')),
+  token_type  TEXT NOT NULL CHECK (token_type IN ('quick_update', 'full_outcome')),
   expires_at  TIMESTAMPTZ NOT NULL,  -- NOW() + 7 days at creation
   used_at     TIMESTAMPTZ,           -- set on first use, token is then invalid
   created_at  TIMESTAMPTZ DEFAULT NOW()
@@ -3925,7 +3992,8 @@ ALTER TABLE outcome_tokens ENABLE ROW LEVEL SECURITY;
  *
  * SIDE EFFECTS:
  *   generateOutcomeToken: inserts into outcome_tokens
- *   validateOutcomeToken: updates outcome_tokens.used_at (marks as used)
+ *   inspectOutcomeToken: none, safe for GET confirmation pages
+ *   consumeOutcomeToken: updates outcome_tokens.used_at (marks as used)
  *
  * @see Module 9 outcome email flow for how tokens are embedded in emails
  */
@@ -3934,17 +4002,17 @@ import { createHash, randomBytes } from 'crypto'
 
 /**
  * Creates a one-time outcome submission token for a case.
- * Called when a follow-up email is scheduled (not when it is sent).
+ * Called when a follow-up email is sent or regenerated immediately before send.
  * The raw token is embedded in the email link; only its hash is stored.
  *
  * @param caseId     - UUID of the case this token is for
- * @param actionType - 'quick_update' for one-click buttons, 'full_outcome' for full form
+ * @param tokenType  - 'quick_update' for one-click buttons, 'full_outcome' for full form
  * @param client     - Service role client (required — no user RLS on this table)
  * @returns Raw opaque token string to embed in email URL
  */
 export async function generateOutcomeToken(
   caseId: string,
-  actionType: 'quick_update' | 'full_outcome',
+  tokenType: 'quick_update' | 'full_outcome',
   client: DbClient
 ): Promise<string> {
   const rawToken = randomBytes(32).toString('hex')  // 64-char hex string
@@ -3956,7 +4024,7 @@ export async function generateOutcomeToken(
   const { error } = await client.from('outcome_tokens').insert({
     case_id:    caseId,
     token_hash: tokenHash,
-    action_type: actionType,
+    token_type: tokenType,
     expires_at: expiresAt
   })
   if (error) throw new ExternalServiceError('Supabase', error.message, { caseId })
@@ -3965,26 +4033,26 @@ export async function generateOutcomeToken(
 }
 
 /**
- * Validates an outcome token from an email link.
- * Marks the token as used (one-time only).
+ * Inspects an outcome token from an email link without consuming it.
+ * Use this only for GET confirmation pages.
  * Returns the associated case_id if valid, null if invalid/expired/used.
  *
- * SIDE EFFECTS: sets outcome_tokens.used_at = NOW() on success
- * IDEMPOTENT: no — calling twice on the same token returns null on second call
+ * SIDE EFFECTS: none
+ * IDEMPOTENT: yes
  *
  * @param rawToken - Token from URL query parameter
  * @param client   - Service role client
- * @returns { caseId, actionType } if valid, null if not
+ * @returns { caseId, tokenType } if valid, null if not
  */
-export async function validateOutcomeToken(
+export async function inspectOutcomeToken(
   rawToken: string,
   client: DbClient
-): Promise<{ caseId: string; actionType: string } | null> {
+): Promise<{ caseId: string; tokenType: string } | null> {
   const tokenHash = createHash('sha256').update(rawToken).digest('hex')
 
   const { data, error } = await client
     .from('outcome_tokens')
-    .select('id, case_id, action_type, expires_at, used_at')
+    .select('id, case_id, token_type, expires_at, used_at')
     .eq('token_hash', tokenHash)
     .single()
 
@@ -3992,13 +4060,36 @@ export async function validateOutcomeToken(
   if (data.used_at) return null                              // already used
   if (new Date(data.expires_at) < new Date()) return null   // expired
 
-  // Mark as used — prevents replay
+  return { caseId: data.case_id, tokenType: data.token_type }
+}
+
+/**
+ * Consumes a valid outcome token during POST submission.
+ * Actual submitted action is not encoded in the token; read it from POST body.
+ *
+ * SIDE EFFECTS: sets outcome_tokens.used_at = NOW() on success
+ * IDEMPOTENT: no — calling twice on the same token returns null on second call
+ *
+ * @param rawToken - Token from request body
+ * @param client   - Service role client
+ * @returns { caseId, tokenType } if valid, null if not
+ */
+export async function consumeOutcomeToken(
+  rawToken: string,
+  client: DbClient
+): Promise<{ caseId: string; tokenType: string } | null> {
+  const inspected = await inspectOutcomeToken(rawToken, client)
+  if (!inspected) return null
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex')
+
+  // Mark as used during POST only — prevents replay
   await client
     .from('outcome_tokens')
     .update({ used_at: new Date().toISOString() })
-    .eq('id', data.id)
+    .eq('token_hash', tokenHash)
+    .is('used_at', null)
 
-  return { caseId: data.case_id, actionType: data.action_type }
+  return inspected
 }
 ```
 
@@ -4020,7 +4111,8 @@ export async function validateOutcomeToken(
  */
 export async function authorizeOutcomeSubmission(
   req: Request,
-  serviceClient: DbClient
+  serviceClient: DbClient,
+  bodyToken?: string
 ): Promise<string> {
   // Path A: authenticated session
   const sessionClient = createServerClient()
@@ -4032,11 +4124,11 @@ export async function authorizeOutcomeSubmission(
     return caseId
   }
 
-  // Path B: one-time token
-  const token = new URL(req.url).searchParams.get('token')
+  // Path B: one-time token from POST body
+  const token = bodyToken
   if (!token) throw new AuthorizationError('Authentication required')
 
-  const result = await validateOutcomeToken(token, serviceClient)
+  const result = await consumeOutcomeToken(token, serviceClient)
   if (!result) throw new AuthorizationError('Token is invalid, expired, or already used')
 
   return result.caseId
@@ -4046,7 +4138,8 @@ export async function authorizeOutcomeSubmission(
 export async function POST(req: Request): Promise<Response> {
   try {
     const serviceClient = createServiceClient()
-    const caseId = await authorizeOutcomeSubmission(req, serviceClient)
+    const body = await req.json()
+    const caseId = await authorizeOutcomeSubmission(req, serviceClient, body.token)
     // ... rest of outcome handling
   } catch (error) {
     return toApiResponse(error)
@@ -4058,19 +4151,19 @@ export async function POST(req: Request): Promise<Response> {
 
 ```
 // CORRECT — opaque token, POST required for state changes
-// Email button links to GET landing page, which POSTs with the token
+// Email button links to GET landing page; user confirmation POSTs with the token
 
 Email one-click button URL:
-  https://claimclarity.in/app/outcomes/update?token={rawToken}&action=appeal_submitted
+  https://claimclarity.in/app/outcomes/update?token={rawToken}&action=submitted_appeal
 
-GET /app/outcomes/update?token=X&action=appeal_submitted
-  → renders a "Confirming your update..." page
-  → page auto-POSTs to /api/outcomes/quick-update with token in body
+GET /app/outcomes/update?token=X&action=submitted_appeal
+  → performs inspectOutcomeToken(token) only; no writes
+  → renders a confirmation page with a user-confirmed POST
 
 POST /api/outcomes/quick-update
   body: { token, action }
-  → validateOutcomeToken(token) → get caseId
-  → update outcomes table
+  → consumeOutcomeToken(token) → get caseId and token_type
+  → update outcomes table using action from POST body
   → return HTML "Thanks — recorded." page with link to full outcome form
 
 // NEVER:
