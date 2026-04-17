@@ -18,6 +18,7 @@
 export const REPORT_PRICE_PAISE = 69900
 export const EXPERT_CALL_PRICE_PAISE = 29900
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
+export const MAX_OUTCOME_EVIDENCE_SIZE_BYTES = 10 * 1024 * 1024
 export const SLA_HOURS = 24
 export const SLA_WARNING_HOURS = 4
 export const DOCUMENT_RETENTION_DAYS = 90
@@ -38,6 +39,11 @@ export const ACCEPTED_DOCUMENT_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/tiff'
+] as const
+export const ACCEPTED_OUTCOME_EVIDENCE_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png'
 ] as const
 export const MAX_DOCUMENT_PAGES = 50
 export const MIN_IMAGE_DPI = 100

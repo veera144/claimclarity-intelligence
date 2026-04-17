@@ -366,6 +366,11 @@ CREATE TABLE outcomes (
   outcome_type                TEXT CHECK (outcome_type IN (
                                 'full_reversal','partial_reversal','no_change','pending','not_applicable'
                               )),
+  patient_action_type         TEXT NOT NULL DEFAULT 'none'
+                                CHECK (patient_action_type IN (
+                                  'none','asked_hospital','asked_insurer_tpa',
+                                  'submitted_appeal','waiting_response','closed_no_benefit'
+                                )),
   report_used_in_appeal       BOOLEAN,
 
   -- Evidence quality
@@ -395,22 +400,26 @@ COMMENT ON COLUMN outcomes.reversal_amount_inr IS
   'Generated: final_settled - original_approved. Positive = patient recovered money. WHOLE RUPEES.';
 COMMENT ON COLUMN outcomes.original_approved_inr IS
   'Copied from cases.original_approved_inr at outcome creation. WHOLE RUPEES.';
+COMMENT ON COLUMN outcomes.outcome_type IS
+  'Result/financial state only: pending, not_applicable, no_change, partial_reversal, full_reversal.';
+COMMENT ON COLUMN outcomes.patient_action_type IS
+  'Patient-reported action state only. Do not force workflow/action states into outcome_type.';
 
 -- OUTCOME TOKENS (one-time links for email-based outcome updates)
 CREATE TABLE outcome_tokens (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id          UUID NOT NULL REFERENCES cases(id),
   token_hash       TEXT NOT NULL UNIQUE,
-  action_type      TEXT NOT NULL CHECK (action_type IN (
-                     'quick_update_submitted','quick_update_not_yet','quick_update_no_appeal',
-                     'quick_update_paid_more','quick_update_rejected','quick_update_waiting',
-                     'quick_update_resolved','quick_update_no_change','quick_update_moved_on',
-                     'full_outcome_form'
-                   )),
+  token_type       TEXT NOT NULL CHECK (token_type IN ('quick_update','full_outcome')),
   expires_at       TIMESTAMPTZ NOT NULL,
   used_at          TIMESTAMPTZ,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+COMMENT ON COLUMN outcome_tokens.token_hash IS
+  'SHA-256 hash of opaque token. Raw token is never stored.';
+COMMENT ON COLUMN outcome_tokens.token_type IS
+  'Authorization scope only: quick_update or full_outcome. Actual submitted action belongs in POST body.';
 
 -- FOLLOW-UP SCHEDULE
 CREATE TABLE follow_up_schedule (
@@ -506,6 +515,7 @@ CREATE INDEX idx_consents_user         ON consents(user_id, consent_type);
 CREATE INDEX idx_consents_active       ON consents(user_id) WHERE revoked_at IS NULL;
 CREATE INDEX idx_payments_case         ON payments(case_id);
 CREATE INDEX idx_outcomes_case         ON outcomes(case_id);
+CREATE INDEX idx_outcome_tokens_hash   ON outcome_tokens(token_hash);
 CREATE INDEX idx_outcome_tokens_case   ON outcome_tokens(case_id);
 CREATE INDEX idx_outcome_tokens_expiry ON outcome_tokens(expires_at) WHERE used_at IS NULL;
 CREATE INDEX idx_followup_scheduled    ON follow_up_schedule(scheduled_at) WHERE sent_at IS NULL;

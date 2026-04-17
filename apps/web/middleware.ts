@@ -5,9 +5,14 @@ import { createMiddlewareClient } from './lib/supabase/middleware'
 
 const PROTECTED_PREFIX = '/app'
 const CONSENT_PROTECTED_PREFIX = '/app/upload'
+const TOKEN_OUTCOME_PATH = '/app/outcomes/update'
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   if (!request.nextUrl.pathname.startsWith(PROTECTED_PREFIX)) {
+    return NextResponse.next()
+  }
+
+  if (request.nextUrl.pathname === TOKEN_OUTCOME_PATH) {
     return NextResponse.next()
   }
 
