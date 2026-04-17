@@ -18,7 +18,7 @@ Status legend:
 | 5 | Rules Engine and Knowledge Base | READY FOR REVIEW |  | Module 5 implemented; lint, typecheck, and checkpoints passed 12/12 including benchmark hard gate. Awaiting reviewer sign-off. |
 | 6 | AI Explanation Layer | NOT STARTED |  |  |
 | 7 | Reviewer Dashboard | NOT STARTED |  |  |
-| 8 | Report Generation and Delivery | NOT STARTED |  |  |
+| 8 | Report Generation and Delivery | READY FOR REVIEW |  | Module 8 implemented; lint, typecheck, Module 7 regression, and Module 8 checkpoints passed 14/14. Awaiting reviewer sign-off. |
 | 9 | Outcome Tracking | NOT STARTED |  |  |
 | 10 | Operations Layer | NOT STARTED |  |  |
 
