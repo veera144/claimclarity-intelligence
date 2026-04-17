@@ -23,7 +23,7 @@ import { Redis } from '@upstash/redis'
 
 import { getRequestIp } from './request'
 
-type RateLimitKind = 'auth' | 'upload' | 'payment'
+type RateLimitKind = 'auth' | 'upload' | 'payment' | 'outcome'
 
 type MemoryBucket = {
   resetAt: number
@@ -36,6 +36,7 @@ const RATE_LIMIT_CONFIG: Record<RateLimitKind, { maxRequests: number; windowMs: 
   auth: { maxRequests: 10, windowMs: 10_000 },
   upload: { maxRequests: 30, windowMs: 60_000 },
   payment: { maxRequests: 5, windowMs: 60_000 },
+  outcome: { maxRequests: 12, windowMs: 60_000 },
 }
 
 function getUpstashLimiter(kind: RateLimitKind): Ratelimit | null {

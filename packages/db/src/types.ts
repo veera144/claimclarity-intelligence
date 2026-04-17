@@ -305,21 +305,35 @@ export type Database = {
           | 'pending'
           | 'not_applicable'
           | null
+        patient_action_type:
+          | 'none'
+          | 'asked_hospital'
+          | 'asked_insurer_tpa'
+          | 'submitted_appeal'
+          | 'waiting_response'
+          | 'closed_no_benefit'
         report_used_in_appeal: boolean | null
         evidence_type: 'self_reported' | 'partially_verified' | 'document_verified'
         evidence_storage_path: string | null
-        evidence_notes: string | null
-        insurer_reply_summary: string | null
-        patient_satisfaction: number | null
-        follow_up_status: string | null
-        created_at: string | null
-        updated_at: string | null
+        user_satisfaction: number | null
+        user_comment: string | null
+        needs_manual_followup: boolean | null
+        manual_followup_reason: string | null
+        collected_via:
+          | 'email_survey_30d'
+          | 'email_survey_60d'
+          | 'email_survey_90d'
+          | 'manual_call'
+          | 'admin_entry'
+          | null
+        collected_at: string | null
+        last_updated_at: string | null
       }>
       outcome_tokens: TableDefinition<{
         id: string
         case_id: string
         token_hash: string
-        action_type: string
+        token_type: 'quick_update' | 'full_outcome'
         expires_at: string
         used_at: string | null
         created_at: string | null

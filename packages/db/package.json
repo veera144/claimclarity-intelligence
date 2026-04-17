@@ -11,6 +11,7 @@
     "./case-ref": "./src/case-ref.ts",
     "./client.browser": "./src/client.browser.ts",
     "./client.server": "./src/client.server.ts",
+    "./outcome-tokens": "./src/outcome-tokens.ts",
     "./types": "./src/types.ts",
     "./verify": "./src/verify.ts"
   },
