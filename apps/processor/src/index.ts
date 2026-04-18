@@ -22,7 +22,9 @@ import { createServiceClient } from '@claimclarity/db'
 import { validateConfig } from '@claimclarity/shared'
 
 import { createHealthRouter } from './health'
+import { initializeProcessorSentry } from './sentry'
 
+initializeProcessorSentry()
 validateConfig()
 
 const app = express()

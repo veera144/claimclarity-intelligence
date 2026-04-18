@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import type { ReactElement, ReactNode } from 'react'
 
+import { DashboardHeader } from '../components/DashboardHeader'
+
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -8,14 +10,19 @@ export const metadata: Metadata = {
   description: 'ClaimClarity internal dashboard infrastructure scaffold'
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: ReactNode
-}>): ReactElement {
+}>): Promise<ReactElement> {
+  const header = await DashboardHeader()
+
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {header}
+        {children}
+      </body>
     </html>
   )
 }

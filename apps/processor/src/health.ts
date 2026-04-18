@@ -22,6 +22,25 @@ export type HealthRouterDeps = {
   db: DbClient
 }
 
+type JobQueueHealth = {
+  queued: number
+  running: number
+  failed_last_hour: number
+}
+
+export type ProcessorHealthPayload = {
+  status: 'ok' | 'degraded' | 'error'
+  timestamp: string
+  checks: {
+    database: 'ok' | 'error'
+    jobQueue: JobQueueHealth
+  }
+}
+
+function oneHourAgo(): string {
+  return new Date(Date.now() - 60 * 60 * 1000).toISOString()
+}
+
 /**
  * Builds the processor health router with a database-backed queue snapshot.
  *
@@ -37,28 +56,9 @@ export function createHealthRouter(deps: HealthRouterDeps): Router {
 
   router.get('/health', async (_request, response) => {
     try {
-      const [queuedResult, runningResult] = await Promise.all([
-        deps.db.from('processing_jobs').select('id', { count: 'exact', head: true }).eq('status', 'queued'),
-        deps.db
-          .from('processing_jobs')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'running')
-      ])
+      const payload = await getProcessorHealth(deps)
 
-      const databaseOk = !queuedResult.error && !runningResult.error
-      const payload = {
-        status: databaseOk ? 'ok' : 'error',
-        timestamp: new Date().toISOString(),
-        checks: {
-          database: databaseOk ? 'ok' : 'error',
-          jobQueue: {
-            queued: queuedResult.count ?? 0,
-            running: runningResult.count ?? 0
-          }
-        }
-      }
-
-      return response.status(databaseOk ? 200 : 503).json(payload)
+      return response.status(payload.status === 'error' ? 503 : 200).json(payload)
     } catch (error) {
       console.error('[health] Failed to evaluate health checks', error)
 
@@ -69,7 +69,8 @@ export function createHealthRouter(deps: HealthRouterDeps): Router {
           database: 'error',
           jobQueue: {
             queued: 0,
-            running: 0
+            running: 0,
+            failed_last_hour: 0
           }
         }
       })
@@ -77,4 +78,42 @@ export function createHealthRouter(deps: HealthRouterDeps): Router {
   })
 
   return router
+}
+
+/**
+ * Reads processor health and queue status.
+ *
+ * SIDE EFFECTS: reads processing_jobs counts from the database
+ * THROWS: Error when database count queries fail
+ * IDEMPOTENT: yes, read-only
+ *
+ * @param deps - Shared dependencies needed to query processor state
+ * @returns Processor health payload
+ */
+export async function getProcessorHealth(deps: HealthRouterDeps): Promise<ProcessorHealthPayload> {
+  const [queuedResult, runningResult, failedResult] = await Promise.all([
+    deps.db.from('processing_jobs').select('id', { count: 'exact', head: true }).eq('status', 'queued'),
+    deps.db.from('processing_jobs').select('id', { count: 'exact', head: true }).eq('status', 'running'),
+    deps.db
+      .from('processing_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'failed')
+      .gte('completed_at', oneHourAgo()),
+  ])
+
+  const databaseOk = !queuedResult.error && !runningResult.error && !failedResult.error
+  const jobQueue: JobQueueHealth = {
+    queued: queuedResult.count ?? 0,
+    running: runningResult.count ?? 0,
+    failed_last_hour: failedResult.count ?? 0,
+  }
+
+  return {
+    status: databaseOk ? (jobQueue.failed_last_hour > 5 ? 'degraded' : 'ok') : 'error',
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: databaseOk ? 'ok' : 'error',
+      jobQueue,
+    },
+  }
 }
