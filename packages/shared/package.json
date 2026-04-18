@@ -10,7 +10,8 @@
     "./config": "./src/config.ts",
     "./constants": "./src/constants.ts",
     "./features": "./src/features.ts",
-    "./result": "./src/result.ts"
+    "./result": "./src/result.ts",
+    "./sentry": "./src/sentry.ts"
   }
 }
 
