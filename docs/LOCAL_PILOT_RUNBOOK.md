@@ -232,7 +232,7 @@ Open:
 http://localhost:3002/health
 ```
 
-Current note: the processor entry point exposes health/readiness. Queue processors are implemented as exported job functions and are exercised by capability checkpoint tests. For local pilot operation, run the web/dashboard normally, keep processor health running, and use the job-processing operator commands in this runbook when queued jobs need to be advanced manually.
+Current note: the processor entry point exposes health/readiness only. It does not expose HTTP job execution endpoints. Queue processors are implemented as exported job functions and are exercised by capability checkpoint tests. For local pilot operation, run the web/dashboard normally, keep processor health running, and use the one-shot operator commands below when queued jobs need to be advanced manually.
 
 ## 8. Validation Commands
 
@@ -243,6 +243,15 @@ pnpm lint
 pnpm typecheck
 pnpm --filter @claimclarity/web build
 pnpm --filter @claimclarity/dashboard build
+```
+
+Local E2E route map verification:
+
+```powershell
+Test-Path -LiteralPath 'apps/web/app/app/cases/[caseRef]/status/page.tsx'
+Test-Path -LiteralPath 'apps/dashboard/app/admin/cases/[caseId]/assignment/page.tsx'
+Test-Path -LiteralPath 'apps/dashboard/app/admin/cases/[caseId]/manual-ocr/page.tsx'
+Test-Path -LiteralPath 'apps/processor/src/cli/run-job.ts'
 ```
 
 Capability checkpoint commands available in this repository:
@@ -269,7 +278,31 @@ pnpm smoke:textract
 
 By default this prints pending unless `TEXTRACT_LIVE_SMOKE=1` is set. Treat live Textract as pending unless the smoke test has explicitly passed with approved AWS credentials.
 
-There is no committed live OpenAI smoke command in the current scripts. Treat live OpenAI smoke as pending unless a separate reviewed live smoke has been explicitly run and recorded.
+Optional live OpenAI smoke command:
+
+```powershell
+pnpm smoke:openai
+```
+
+By default this prints pending. It only calls OpenAI when `OPENAI_LIVE_SMOKE=1` and `OPENAI_API_KEY` are set. The smoke uses synthetic non-case data and must not be run as part of default local validation.
+
+One-shot processor job commands:
+
+```powershell
+$env:CASE_ID='<optional case uuid>'
+pnpm job:quality
+pnpm job:ocr
+pnpm job:rules
+pnpm job:ai
+pnpm job:report
+pnpm job:email
+pnpm job:followups
+pnpm job:sla
+pnpm job:stale
+pnpm job:all-once
+```
+
+`CASE_ID` scopes case-specific jobs where supported. The commands print concise counts only and must not print secrets, raw OCR text, AI prompts, or extracted document content.
 
 ## 9. Create a Test Patient
 
@@ -319,8 +352,16 @@ Expected database state:
 Patient-created case:
 
 1. Open `http://localhost:3000/app/upload` after consent.
-2. The page creates a case through `POST /api/cases`.
+2. Choose `Start new case`. The page calls `POST /api/cases` only after this explicit action.
 3. Record the returned case reference shown on the upload page.
+
+Patient case resume:
+
+1. Open `http://localhost:3000/app/dashboard`.
+2. Review the authenticated patient's own case list.
+3. Choose `Resume upload`, `Continue to payment`, `Open report`, or `Status` based on the displayed next action.
+4. To resume document upload directly, open `http://localhost:3000/app/upload?caseId=<case uuid>`.
+5. To check progress, open `http://localhost:3000/app/cases/<caseRef>/status`.
 
 Expected database state:
 
@@ -345,6 +386,8 @@ Expected database state:
 ## 12. Document Intake and Quality Check
 
 As the patient, open `http://localhost:3000/app/upload`.
+
+The upload page does not create a case automatically. Choose an existing resumable case or choose `Start new case`.
 
 Upload the three required document slots:
 
@@ -390,7 +433,7 @@ Process queued quality-check jobs for one case:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { createServiceClient } = await import('@claimclarity/db'); const { processQueuedQualityCheckJobs } = await import('./apps/processor/src/jobs/quality-check.ts'); console.log(await processQueuedQualityCheckJobs(createServiceClient(), process.env.CASE_ID));"
+pnpm job:quality
 ```
 
 Pass path:
@@ -519,7 +562,7 @@ Process queued OCR jobs:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { createServiceClient } = await import('@claimclarity/db'); const { processQueuedOcrJobs } = await import('./apps/processor/src/jobs/ocr-job.ts'); console.log(await processQueuedOcrJobs(createServiceClient(), process.env.CASE_ID));"
+pnpm job:ocr
 ```
 
 Expected state:
@@ -543,12 +586,12 @@ Rules:
 - Keep bill line amounts in paise.
 - Keep insurer approved/deducted amounts in whole rupees.
 
-Complete manual extraction through the exported helper:
+Complete manual extraction through the dashboard shell:
 
-```powershell
-$env:DOCUMENT_ID='<document uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { createServiceClient } = await import('@claimclarity/db'); const { completeManualOcrExtraction } = await import('./apps/processor/src/jobs/ocr-job.ts'); await completeManualOcrExtraction({ client: createServiceClient(), documentId: process.env.DOCUMENT_ID, data: { summary_lines: ['manual structured summary'] } }); console.log('manual extraction saved');"
-```
+1. Sign in to `http://localhost:3001` as an admin or as the assigned reviewer.
+2. Open `/admin/cases/<caseId>/manual-ocr`.
+3. Complete the structured JSON form for each eligible failed or manual-required document.
+4. Submit. The server validates the structured shape, calls the existing manual completion path, and audits document ID, schema type, actor, and completion.
 
 For a useful end-to-end rules-engine run, provide document-specific normalized data:
 
@@ -568,7 +611,7 @@ Process queued rules-engine jobs:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { createServiceClient } = await import('@claimclarity/db'); const { processQueuedRulesEngineJobs } = await import('./apps/processor/src/rulesEngine/engine.ts'); console.log(await processQueuedRulesEngineJobs(createServiceClient(), process.env.CASE_ID));"
+pnpm job:rules
 ```
 
 Expected state:
@@ -594,7 +637,7 @@ Process queued AI draft jobs:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { createServiceClient } = await import('@claimclarity/db'); const { processQueuedAiDraftJobs } = await import('./apps/processor/src/jobs/aiDraftJob.ts'); console.log(await processQueuedAiDraftJobs(createServiceClient(), process.env.CASE_ID));"
+pnpm job:ai
 ```
 
 Expected state:
@@ -607,7 +650,7 @@ Expected state:
 - `current_step='awaiting_review'`.
 - Reviewer notification is created.
 
-Live OpenAI smoke is pending unless explicitly verified and recorded. AI Explanation and Drafting supports deterministic fallback when token budget, provider, JSON, schema, or semantic validation fails. Fallback output is still internal and reviewer-gated.
+Live OpenAI smoke is pending unless `pnpm smoke:openai` has explicitly passed with `OPENAI_LIVE_SMOKE=1`. AI Explanation and Drafting supports deterministic fallback when token budget, provider, JSON, schema, or semantic validation fails. Fallback output is still internal and reviewer-gated.
 
 For fallback-only confidence during local pilot, run:
 
@@ -623,6 +666,14 @@ Prerequisites:
 - Reviewer user exists.
 - Case has `assigned_reviewer_id` set to that reviewer, or admin is reviewing.
 - Case status is `ai_draft_ready`.
+
+Assign reviewer and expert:
+
+1. Sign in to `http://localhost:3001` as an admin.
+2. Open `/admin/cases/<caseId>/assignment`.
+3. Choose a reviewer from users with role `reviewer`.
+4. Choose an expert from users with role `expert` when expert escalation may be needed.
+5. Submit. The server audits old and new reviewer/expert IDs.
 
 Steps:
 
@@ -656,7 +707,7 @@ Process queued report-generation jobs:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { processQueuedReportGenerationJobs } = await import('./apps/processor/src/jobs/reportGenerationJob.ts'); console.log(await processQueuedReportGenerationJobs(undefined, process.env.CASE_ID));"
+pnpm job:report
 ```
 
 Expected state:
@@ -673,7 +724,7 @@ Process queued report email jobs only when using real test-safe Resend config:
 
 ```powershell
 $env:CASE_ID='<case uuid>'
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node --input-type=module -e "const { processQueuedEmailDeliveryJobs } = await import('./apps/processor/src/jobs/reportGenerationJob.ts'); console.log(await processQueuedEmailDeliveryJobs(undefined, undefined, process.env.CASE_ID));"
+pnpm job:email
 ```
 
 ## 20. Report Generation and Delivery Patient Access
@@ -681,8 +732,9 @@ node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=nod
 As the patient:
 
 1. Sign in to `http://localhost:3000`.
-2. Open `/app/cases/<caseRef>/report`.
-3. Click the download button.
+2. Open `/app/cases/<caseRef>/status` and confirm the report action is available.
+3. Open `/app/cases/<caseRef>/report`.
+4. Click the download button.
 
 Expected state:
 
@@ -697,7 +749,7 @@ Expected state:
 Session path:
 
 1. Sign in as the patient.
-2. Open `/app/outcomes/<caseRef>`.
+2. Open `/app/cases/<caseRef>/status` or `/app/outcomes/<caseRef>`.
 3. Select the patient action.
 4. If the insurer/TPA responded, enter final settled amount in whole rupees.
 5. Optionally upload evidence as PDF/JPEG/PNG.
@@ -735,7 +787,17 @@ Check:
 - `/admin/high-value-wins` for high-value reported wins.
 - `/admin/payment-segmentation` for paid/waived/test separation.
 - `/admin/audit` for audit visibility.
+- `/admin/cases/<caseId>/assignment` for admin-only reviewer/expert assignment.
+- `/admin/cases/<caseId>/manual-ocr` for eligible structured manual OCR completion.
 - `http://localhost:3002/health` for processor database and queue health.
+
+Run local operations jobs as needed:
+
+```powershell
+pnpm job:followups
+pnpm job:sla
+pnpm job:stale
+```
 
 Expected verification:
 
@@ -760,15 +822,18 @@ Use one local/staging test case:
 - [ ] Processor health running on `http://localhost:3002/health`.
 - [ ] Patient signs up/signs in.
 - [ ] Patient submits all five consents.
-- [ ] Patient case created with reports/outcomes rows.
+- [ ] Patient opens `/app/dashboard` and explicitly starts or resumes a case.
+- [ ] Patient case created with reports/outcomes rows only after explicit start.
 - [ ] Required documents uploaded.
 - [ ] Quality checks pass.
 - [ ] Payment completed through Razorpay test, admin waiver, internal code, or test simulation.
 - [ ] OCR path produces structured `extracted_json` or approved manual fallback.
+- [ ] Admin assigns reviewer/expert through `/admin/cases/<caseId>/assignment`.
 - [ ] Rules engine creates findings and queues AI draft.
 - [ ] OpenAI draft generation succeeds or deterministic fallback is recorded.
 - [ ] Reviewer confirms/edits findings and signs off.
 - [ ] Report generation job delivers private PDF.
+- [ ] Patient checks `/app/cases/<caseRef>/status`.
 - [ ] Patient downloads report after login.
 - [ ] Patient submits outcome through session or valid token.
 - [ ] Ops dashboard shows correct case, payment segment, outcome, and audit state.

@@ -613,6 +613,13 @@ export async function completeManualOcrExtraction(input: {
     data: input.data,
   })
 
+  if (document.doc_type === 'insurer_response') {
+    const insurerData = insurerDataFromExtraction(normalized)
+    if (insurerData) {
+      await applyInsurerAmounts({ client: input.client, caseId: document.case_id, data: insurerData })
+    }
+  }
+
   const { error } = await input.client
     .from('documents')
     .update({
