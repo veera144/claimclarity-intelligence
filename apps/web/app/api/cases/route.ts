@@ -33,6 +33,64 @@ import { getRequestIp } from '../../../lib/request'
 
 export const runtime = 'nodejs'
 
+const PATIENT_CASE_SELECT = [
+  'id',
+  'case_ref',
+  'status',
+  'current_step',
+  'insurer_name',
+  'claim_amount_inr',
+  'case_type',
+  'created_at',
+  'updated_at',
+].join(', ')
+
+export async function GET(request: Request): Promise<Response> {
+  try {
+    const sessionClient = await createServerClient()
+    const {
+      data: { user },
+    } = await sessionClient.auth.getUser()
+
+    if (!user) {
+      throw new AuthorizationError('Authentication required')
+    }
+
+    const url = new URL(request.url)
+    const caseId = url.searchParams.get('caseId')
+    const serviceClient = createServiceClient()
+
+    if (caseId) {
+      const { data, error } = await serviceClient
+        .from('cases')
+        .select(PATIENT_CASE_SELECT)
+        .eq('id', caseId)
+        .eq('patient_id', user.id)
+        .maybeSingle()
+
+      if (error) {
+        throw new ExternalServiceError('Supabase', error.message, { caseId })
+      }
+
+      return Response.json({ case: data ?? null })
+    }
+
+    const { data, error } = await serviceClient
+      .from('cases')
+      .select(PATIENT_CASE_SELECT)
+      .eq('patient_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      throw new ExternalServiceError('Supabase', error.message, { userId: user.id })
+    }
+
+    return Response.json({ cases: data })
+  } catch (error) {
+    return toApiResponse(error)
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const limited = await rateLimitRequest(request, 'upload')
