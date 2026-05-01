@@ -22,7 +22,7 @@ import { createHash, randomBytes } from 'node:crypto'
 
 import { OUTCOME_TOKEN_TTL_DAYS } from '@claimclarity/shared/constants'
 
-import { createServiceClient } from './client.server'
+import { createServiceClient } from './client.server.ts'
 import type { DbClient, Json } from './types'
 
 export type OutcomeTokenType = 'quick_update' | 'full_outcome'

@@ -5,6 +5,7 @@ import { createServerClient } from '@claimclarity/db'
 import { readDashboardActor } from '../lib/review/session'
 
 import { NotificationBell, type NotificationBellItem } from './NotificationBell'
+import { InternalBadge } from './internal-ui'
 
 const INTERNAL_LINKS = [
   { href: '/queue', label: 'Queue' },
@@ -28,20 +29,29 @@ export async function DashboardHeader(): Promise<ReactElement | null> {
   const notifications = data as NotificationBellItem[]
 
   return (
-    <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/95 px-6 py-3 text-neutral-100">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-        <Link className="text-sm font-semibold text-emerald-200 no-underline" href="/">
-          ClaimClarity
-        </Link>
-        <nav className="flex items-center gap-4 text-sm">
+    <header className="sticky top-0 z-20 border-b border-navy-800 bg-navy-950/95 text-white backdrop-blur">
+      <div className="internal-shell flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <Link className="text-lg font-semibold text-white no-underline" href="/">
+            ClaimClarity Dashboard
+          </Link>
+          <p className="mt-1 text-sm text-navy-200">
+            Internal review, operations, and pilot controls.
+          </p>
+        </div>
+        <nav className="flex flex-wrap items-center gap-3 text-sm">
           {INTERNAL_LINKS.map((link) =>
             link.href === '/admin' && actor.role !== 'admin' ? null : (
-              <Link className="text-neutral-300 no-underline hover:text-white" href={link.href} key={link.href}>
+              <Link
+                className="rounded-full px-3 py-2 text-navy-100 no-underline transition hover:bg-navy-900 hover:text-white"
+                href={link.href}
+                key={link.href}
+              >
                 {link.label}
               </Link>
             )
           )}
-          <span className="rounded bg-neutral-900 px-2 py-1 text-xs uppercase text-neutral-300">{actor.role}</span>
+          <InternalBadge label={actor.role} tone="teal" />
           <NotificationBell actorId={actor.id} initialNotifications={notifications} />
         </nav>
       </div>

@@ -15,7 +15,9 @@ export default tseslint.config(
         projectService: {
           allowDefaultProject: [
             'apps/dashboard/next.config.mjs',
+            'apps/dashboard/postcss.config.js',
             'apps/web/next.config.mjs',
+            'apps/web/postcss.config.js',
             'eslint.config.js',
             'postcss.config.js'
           ]

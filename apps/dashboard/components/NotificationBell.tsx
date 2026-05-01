@@ -3,7 +3,7 @@
 import type { ReactElement } from 'react'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@claimclarity/db'
+import { createBrowserClient } from '@claimclarity/db/client.browser'
 
 export type NotificationBellItem = {
   id: string
@@ -57,6 +57,20 @@ function relativeTime(value: string | null): string {
 
 function notificationHref(item: NotificationBellItem): string {
   return item.case_id ? `/cases/${item.case_id}` : '/queue'
+}
+
+function notificationTone(type: string): 'teal' | 'attention' | 'deducted' | 'navy' {
+  if (type.includes('sla') || type.includes('manual')) return 'attention'
+  if (type.includes('failed')) return 'deducted'
+  if (type.includes('processing')) return 'navy'
+  return 'teal'
+}
+
+function dotTone(type: ReturnType<typeof notificationTone>): string {
+  if (type === 'attention') return 'bg-attention-500'
+  if (type === 'deducted') return 'bg-deducted-500'
+  if (type === 'navy') return 'bg-navy-500'
+  return 'bg-teal-500'
 }
 
 export function NotificationBell({
@@ -124,7 +138,7 @@ export function NotificationBell({
       <button
         aria-expanded={open}
         aria-label="Reviewer notifications"
-        className="relative rounded border border-neutral-700 px-3 py-2 text-sm text-neutral-100"
+        className="relative rounded-full border border-navy-700 bg-navy-900 px-3 py-2 text-sm text-white"
         onClick={() => {
           setOpen((current) => !current)
         }}
@@ -132,26 +146,26 @@ export function NotificationBell({
       >
         Alerts
         {unreadCount > 0 ? (
-          <span className="ml-2 rounded bg-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-950">
+          <span className="ml-2 rounded-full bg-teal-200 px-2 py-0.5 text-xs font-semibold text-teal-950">
             {unreadCount}
           </span>
         ) : null}
       </button>
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded border border-neutral-700 bg-neutral-950 p-3 shadow-xl">
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-3xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-300/70">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-white">Notifications</p>
-            <button className="rounded px-2 py-1 text-xs text-emerald-200" onClick={markAllRead} type="button">
+            <p className="text-sm font-semibold text-navy-950">Notifications</p>
+            <button className="rounded-full px-2 py-1 text-xs text-teal-700" onClick={markAllRead} type="button">
               Mark all read
             </button>
           </div>
           <div className="mt-3 max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
-              <p className="py-6 text-sm text-neutral-400">No notifications.</p>
+              <p className="py-6 text-sm text-slate-500">No notifications.</p>
             ) : null}
             {notifications.map((notification) => (
               <button
-                className="block w-full rounded border-b border-neutral-900 px-2 py-3 text-left hover:bg-neutral-900"
+                className="block w-full rounded-2xl border border-transparent px-3 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
                 key={notification.id}
                 onClick={() => {
                   setOpen(false)
@@ -160,10 +174,13 @@ export function NotificationBell({
                 type="button"
               >
                 <span className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-neutral-100">{notification.notification_type}</span>
-                  <span className="text-xs text-neutral-500">{relativeTime(notification.created_at)}</span>
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-navy-950">
+                    <span className={`h-2.5 w-2.5 rounded-full ${dotTone(notificationTone(notification.notification_type))}`} />
+                    {notification.notification_type}
+                  </span>
+                  <span className="text-xs text-slate-500">{relativeTime(notification.created_at)}</span>
                 </span>
-                <span className="mt-1 block text-sm text-neutral-300">{notification.message}</span>
+                <span className="mt-1 block text-sm leading-6 text-slate-600">{notification.message}</span>
               </button>
             ))}
           </div>

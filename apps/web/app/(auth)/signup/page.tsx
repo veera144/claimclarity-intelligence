@@ -2,8 +2,11 @@
 
 import type { FormEvent, ReactElement } from 'react'
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@claimclarity/db'
+import { createBrowserClient } from '@claimclarity/db/client.browser'
+
+import { PatientAuthShell } from '../../../components/patient-ui'
 
 export default function SignupPage(): ReactElement {
   const router = useRouter()
@@ -39,17 +42,28 @@ export default function SignupPage(): ReactElement {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl shadow-slate-950"
-      >
-        <p className="text-sm uppercase tracking-[0.3em] text-sky-300">Patient Signup</p>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Create your account</h1>
-        <label className="mt-8 block text-sm text-slate-200">
-          Email
+    <PatientAuthShell
+      eyebrow="Patient sign up"
+      title="Create your account"
+      description="Set up secure access for your case, consent steps, report delivery, and outcome follow-up."
+      asideTitle="How the pilot works"
+      asideBody="You stay in control of the timeline. We do not start a case until you choose to begin and upload documents."
+      asidePoints={[
+        'Consent is reviewed before document upload opens.',
+        'Human review remains required before any report is delivered.',
+        'You can return later to finish uploads or share an outcome update.',
+      ]}
+    >
+      <form onSubmit={handleSubmit}>
+        <p className="patient-eyebrow">Secure account setup</p>
+        <h2 className="mt-3 text-2xl font-semibold text-navy-950">Create a patient login</h2>
+        <p className="mt-3 patient-copy">
+          Use an email address you can access during the pilot.
+        </p>
+        <label className="mt-8 patient-label">
+          Email address
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+            className="patient-input"
             type="email"
             value={email}
             onChange={(event) => {
@@ -58,10 +72,10 @@ export default function SignupPage(): ReactElement {
             required
           />
         </label>
-        <label className="mt-4 block text-sm text-slate-200">
+        <label className="mt-5 patient-label">
           Password
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+            className="patient-input"
             type="password"
             value={password}
             onChange={(event) => {
@@ -71,18 +85,23 @@ export default function SignupPage(): ReactElement {
             required
           />
         </label>
-        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        <p className="mt-3 text-sm text-navy-600">Use at least 8 characters.</p>
+        {error ? (
+          <p className="mt-4 rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
+            {error}
+          </p>
+        ) : null}
         <button
-          className="mt-6 w-full rounded-xl bg-sky-300 px-4 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+          className="patient-primary-button mt-6 w-full"
           type="submit"
           disabled={isPending}
         >
           {isPending ? 'Creating account...' : 'Sign up'}
         </button>
-        <p className="mt-5 text-sm text-slate-300">
-          Already have an account? <a href="/login">Sign in</a>
+        <p className="mt-5 text-sm text-navy-600">
+          Already have an account? <Link href="/login">Sign in</Link>
         </p>
       </form>
-    </main>
+    </PatientAuthShell>
   )
 }

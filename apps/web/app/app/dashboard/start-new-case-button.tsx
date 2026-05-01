@@ -29,14 +29,18 @@ export function StartNewCaseButton(): ReactElement {
   return (
     <div>
       <button
-        className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="patient-primary-button"
         disabled={isPending}
         onClick={startCase}
         type="button"
       >
         {isPending ? 'Starting case...' : 'Start new case'}
       </button>
-      {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p className="mt-3 rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import type { FormEvent, ReactElement } from 'react'
 import { useState, useTransition } from 'react'
-import { createBrowserClient } from '@claimclarity/db'
+import { createBrowserClient } from '@claimclarity/db/client.browser'
 
 export default function ForgotPasswordPage(): ReactElement {
   const [email, setEmail] = useState('')

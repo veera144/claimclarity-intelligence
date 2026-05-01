@@ -20,6 +20,8 @@ import type { ReactElement } from 'react'
 import { redirect } from 'next/navigation'
 import { createServerClient, createServiceClient } from '@claimclarity/db'
 
+import { PatientScaffold, StatusBadge } from '../../../../components/patient-ui'
+
 import { OutcomeForm } from './outcome-form'
 
 type OutcomePageProps = {
@@ -61,15 +63,18 @@ export default async function OutcomePage(props: OutcomePageProps): Promise<Reac
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-12 font-['IBM_Plex_Sans',Arial,sans-serif] text-zinc-950">
-      <div className="mx-auto max-w-3xl">
-        <p className="text-sm font-semibold uppercase text-teal-700">ClaimClarity</p>
-        <h1 className="mt-3 text-3xl font-semibold">Share your claim outcome</h1>
-        <p className="mt-4 text-zinc-700">
-          Case {caseRow.case_ref}. Your update helps measure real patient value.
-        </p>
+    <PatientScaffold
+      eyebrow="Outcome update"
+      title="Share your claim outcome"
+      description={`Case ${caseRow.case_ref}. Your update helps measure whether the report was useful in practice.`}
+    >
+      <div className="max-w-4xl">
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge label="Session-protected" tone="navy" />
+          <StatusBadge label="Whole-rupee outcome amounts" tone="teal" />
+        </div>
         <OutcomeForm caseId={caseRow.id} caseRef={caseRow.case_ref} />
       </div>
-    </main>
+    </PatientScaffold>
   )
 }

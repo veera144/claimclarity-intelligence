@@ -20,6 +20,8 @@ import type { ReactElement } from 'react'
 import { redirect } from 'next/navigation'
 import { createServerClient, createServiceClient } from '@claimclarity/db'
 
+import { PatientScaffold, StatusBadge } from '../../../../../components/patient-ui'
+
 import { ReportDownloadButton } from './report-download-button'
 
 type ReportPageProps = {
@@ -70,26 +72,33 @@ export default async function ReportPage(props: ReportPageProps): Promise<ReactE
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-12 font-['IBM_Plex_Sans',Arial,sans-serif] text-zinc-950">
-      <div className="mx-auto max-w-3xl">
-        <p className="text-sm font-semibold uppercase text-teal-700">ClaimClarity</p>
-        <h1 className="mt-3 text-3xl font-semibold">Your claim analysis report is ready</h1>
-        <dl className="mt-8 grid gap-4 border-y border-zinc-300 py-6 sm:grid-cols-2">
+    <PatientScaffold
+      eyebrow="Delivered report"
+      title="Your claim analysis report is ready"
+      description="Your report stays behind login. A short-lived download link is created only when you request it."
+    >
+      <div className="max-w-4xl">
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge label="Report ready" tone="covered" />
+          <StatusBadge label="One-hour download link" tone="teal" />
+        </div>
+        <div className="patient-surface mt-6 p-8 sm:p-10">
+          <dl className="grid gap-5 border-b border-navy-200 pb-6 sm:grid-cols-2">
           <div>
-            <dt className="text-sm font-semibold text-zinc-600">Case ref</dt>
-            <dd className="mt-1 text-lg">{caseRow.case_ref}</dd>
+            <dt className="text-sm font-semibold text-navy-500">Case ref</dt>
+            <dd className="mt-1 text-lg font-semibold text-navy-950">{caseRow.case_ref}</dd>
           </div>
           <div>
-            <dt className="text-sm font-semibold text-zinc-600">Delivered</dt>
-            <dd className="mt-1 text-lg">{formatDate(report.delivered_at)}</dd>
+            <dt className="text-sm font-semibold text-navy-500">Delivered</dt>
+            <dd className="mt-1 text-lg font-semibold text-navy-950">{formatDate(report.delivered_at)}</dd>
           </div>
-        </dl>
-        <p className="mt-6 max-w-2xl text-zinc-700">
-          You will receive a one-hour download link after you press the button. The link is not
-          displayed or saved here.
-        </p>
-        <ReportDownloadButton caseId={caseRow.id} />
+          </dl>
+          <p className="mt-6 max-w-2xl text-sm leading-7 text-navy-700">
+            The download button asks the app for a fresh link when you need it. The link is not shown or stored on this page.
+          </p>
+          <ReportDownloadButton caseId={caseRow.id} />
+        </div>
       </div>
-    </main>
+    </PatientScaffold>
   )
 }

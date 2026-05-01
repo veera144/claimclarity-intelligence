@@ -9,6 +9,7 @@ import {
   type UploadDocType,
   validateUploadFile,
 } from '../../../lib/validation/document.schemas'
+import { PatientScaffold, StatusBadge } from '../../../components/patient-ui'
 
 type RequiredSlotId = 'coverage' | 'hospital_bill' | 'insurer_response'
 
@@ -373,28 +374,28 @@ export function UploadWorkspace(): ReactElement {
   }
 
   return (
-    <main className="min-h-screen bg-navy-50 px-4 py-10 font-['IBM_Plex_Sans',Arial,sans-serif] text-navy-950">
-      <div className="mx-auto max-w-4xl">
-        <p className="text-sm font-semibold uppercase text-teal-700">ClaimClarity</p>
-        <h1 className="mt-3 text-3xl font-semibold">Upload claim documents</h1>
-        <p className="mt-3 max-w-2xl text-navy-700">
-          Case {caseLabel}. Start a new case only when you are ready, or resume an existing upload.
-        </p>
+    <PatientScaffold
+      eyebrow="Document upload"
+      title="Upload claim documents"
+      description={`Case ${caseLabel}. Start a new case only when you are ready, or resume an existing upload.`}
+      actions={<StatusBadge label={activeCase ? 'Case selected' : 'Choose or start a case'} tone="teal" />}
+    >
+      <div className="max-w-5xl">
         {pageError ? (
-          <p className="mt-4 border-l-4 border-deducted-500 bg-white p-3 text-sm text-deducted-700">
+          <p className="rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
             {pageError}
           </p>
         ) : null}
 
         {!activeCase ? (
-          <section className="mt-8 grid gap-4 border-t border-navy-200 pt-6">
-            <div className="border-l-4 border-teal-500 bg-white p-5">
+          <section className="mt-8 grid gap-4">
+            <div className="patient-status-card border-l-4 border-teal-500">
               <h2 className="font-semibold">Choose a case</h2>
-              <p className="mt-2 text-sm text-navy-700">
+              <p className="mt-2 text-sm leading-7 text-navy-700">
                 Uploads are attached to one case. No case is created until you choose to start one.
               </p>
               <button
-                className="mt-4 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="patient-primary-button mt-4"
                 disabled={isPending}
                 onClick={startNewCase}
                 type="button"
@@ -404,15 +405,15 @@ export function UploadWorkspace(): ReactElement {
             </div>
             {resumableCases.map((caseRow) => (
               <button
-                className="border-l-4 border-attention-500 bg-white p-5 text-left shadow-sm"
+                className="patient-status-card border-l-4 border-attention-500 text-left transition hover:-translate-y-0.5 hover:shadow-md"
                 key={caseRow.id}
                 onClick={() => {
                   chooseCase(caseRow)
                 }}
                 type="button"
               >
-                <span className="block font-semibold">{caseRow.case_ref}</span>
-                <span className="mt-2 block text-sm text-navy-700">
+                <span className="block text-lg font-semibold text-navy-950">{caseRow.case_ref}</span>
+                <span className="mt-2 block text-sm leading-7 text-navy-700">
                   {caseRow.status === 'payment_pending'
                     ? 'Documents are ready for payment.'
                     : 'Document upload is still open.'}
@@ -428,13 +429,13 @@ export function UploadWorkspace(): ReactElement {
         {activeCase ? (
           <>
             {!canUpload(activeCase) ? (
-              <section className="mt-8 border-l-4 border-teal-500 bg-white p-5">
+              <section className="mt-8 patient-status-card border-l-4 border-teal-500">
                 <h2 className="font-semibold">This case is past upload</h2>
-                <p className="mt-2 text-sm text-navy-700">
+                <p className="mt-2 text-sm leading-7 text-navy-700">
                   Use the status page for current steps and report or outcome actions.
                 </p>
                 <Link
-                  className="mt-4 inline-block rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white"
+                  className="patient-primary-button mt-4"
                   href={`/app/cases/${encodeURIComponent(activeCase.case_ref)}/status`}
                 >
                   View status
@@ -444,22 +445,26 @@ export function UploadWorkspace(): ReactElement {
 
             {canUpload(activeCase) ? (
               <>
-                <section className="mt-8 border-t border-navy-200 pt-6">
+                <section className="mt-8">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <StatusBadge label="Required documents" tone="navy" />
+                    <StatusBadge label={allRequiredPassed ? 'Ready for next step' : 'Upload in progress'} tone={allRequiredPassed ? 'covered' : 'attention'} />
+                  </div>
                   <h2 className="text-xl font-semibold">Required documents</h2>
                   <div className="mt-4 grid gap-4">
                     {REQUIRED_SLOTS.map((slot) => {
                       const state = slots[slot.id]
                       return (
-                        <div key={slot.id} className="border-l-4 border-teal-500 bg-white p-5">
+                        <div key={slot.id} className="patient-status-card border-l-4 border-teal-500">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                              <h3 className="font-semibold">{slot.title}</h3>
-                              <p className="mt-1 text-sm text-navy-700">{slot.body}</p>
+                              <h3 className="font-semibold text-navy-950">{slot.title}</h3>
+                              <p className="mt-1 text-sm leading-7 text-navy-700">{slot.body}</p>
                               {slot.id === 'coverage' ? (
-                                <label className="mt-3 block text-sm text-navy-700">
+                                <label className="patient-label mt-3">
                                   Document type
                                   <select
-                                    className="mt-1 block rounded-lg border border-navy-300 bg-white px-3 py-2"
+                                    className="patient-select"
                                     value={coverageDocType}
                                     onChange={(event) => {
                                       setCoverageDocType(event.target.value as UploadDocType)
@@ -471,12 +476,18 @@ export function UploadWorkspace(): ReactElement {
                                 </label>
                               ) : null}
                             </div>
-                            <p className="inline-flex items-center gap-2 rounded-lg border border-navy-200 px-3 py-2 text-sm font-medium text-navy-800">
-                              <span className="h-2 w-2 rounded-full bg-teal-500" />
-                              {statusCopy(state)}
-                            </p>
+                            <StatusBadge
+                              label={statusCopy(state)}
+                              tone={
+                                state.status === 'passed'
+                                  ? 'covered'
+                                  : state.status === 'failed'
+                                    ? 'attention'
+                                    : 'teal'
+                              }
+                            />
                           </div>
-                          <label className="mt-4 flex min-h-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-teal-700 bg-teal-50 px-4 py-5 text-center text-sm font-medium text-teal-900">
+                          <label className="mt-4 flex min-h-24 cursor-pointer items-center justify-center rounded-3xl border border-dashed border-teal-400 bg-teal-50 px-4 py-5 text-center text-sm font-medium text-teal-900 transition hover:border-teal-600 hover:bg-teal-100">
                             {state.documentId ? 'Replace document' : 'Choose file'}
                             <input
                               className="sr-only"
@@ -493,9 +504,9 @@ export function UploadWorkspace(): ReactElement {
                   </div>
                 </section>
 
-                <section className="mt-8 border-t border-navy-200 pt-6">
+                <section className="mt-8">
                   <button
-                    className="rounded-lg border border-navy-300 px-4 py-2 font-medium text-navy-900"
+                    className="patient-secondary-button"
                     type="button"
                     onClick={() => {
                       setAdditionalOpen((open) => !open)
@@ -504,11 +515,11 @@ export function UploadWorkspace(): ReactElement {
                     {additionalOpen ? 'Hide additional documents' : 'Add additional documents'}
                   </button>
                   {additionalOpen ? (
-                    <div className="mt-4 border-l-4 border-teal-500 bg-white p-5">
-                      <label className="block text-sm text-navy-700">
+                    <div className="mt-4 patient-status-card border-l-4 border-teal-500">
+                      <label className="patient-label">
                         Document type
                         <select
-                          className="mt-1 block rounded-lg border border-navy-300 bg-white px-3 py-2"
+                          className="patient-select"
                           value={additionalDocType}
                           onChange={(event) => {
                             setAdditionalDocType(event.target.value as UploadDocType)
@@ -521,7 +532,7 @@ export function UploadWorkspace(): ReactElement {
                           ))}
                         </select>
                       </label>
-                      <label className="mt-4 flex min-h-20 cursor-pointer items-center justify-center rounded-lg border border-dashed border-teal-700 bg-teal-50 px-4 py-5 text-center text-sm font-medium text-teal-900">
+                      <label className="mt-4 flex min-h-20 cursor-pointer items-center justify-center rounded-3xl border border-dashed border-teal-400 bg-teal-50 px-4 py-5 text-center text-sm font-medium text-teal-900 transition hover:border-teal-600 hover:bg-teal-100">
                         Choose additional file
                         <input
                           className="sr-only"
@@ -537,19 +548,16 @@ export function UploadWorkspace(): ReactElement {
                   ) : null}
                 </section>
 
-                <section className="mt-8 flex flex-wrap gap-3 border-t border-navy-200 pt-6">
+                <section className="mt-8 flex flex-wrap gap-3">
                   <button
-                    className="rounded-lg bg-teal-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="patient-primary-button"
                     type="button"
                     disabled={(!allRequiredPassed && activeCase.status !== 'payment_pending') || isPending}
                     onClick={continueFromUpload}
                   >
                     {activeCase.status === 'payment_pending' ? 'Proceed to payment' : 'View case status'}
                   </button>
-                  <Link
-                    className="rounded-lg border border-navy-300 px-5 py-3 font-semibold text-navy-800"
-                    href="/app/dashboard"
-                  >
+                  <Link className="patient-secondary-button" href="/app/dashboard">
                     Back to cases
                   </Link>
                 </section>
@@ -558,6 +566,6 @@ export function UploadWorkspace(): ReactElement {
           </>
         ) : null}
       </div>
-    </main>
+    </PatientScaffold>
   )
 }
