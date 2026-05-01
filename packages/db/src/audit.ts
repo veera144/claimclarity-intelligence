@@ -16,7 +16,7 @@
  *   - /packages/db/src/client.server.ts
  */
 
-import { createServiceClient } from './client.server'
+import { createServiceClient } from './client.server.ts'
 import type { Json } from './types'
 
 export type LogAuditInput = {

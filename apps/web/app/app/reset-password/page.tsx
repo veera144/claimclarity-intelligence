@@ -3,7 +3,7 @@
 import type { FormEvent, ReactElement } from 'react'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@claimclarity/db'
+import { createBrowserClient } from '@claimclarity/db/client.browser'
 
 export default function ResetPasswordPage(): ReactElement {
   const router = useRouter()

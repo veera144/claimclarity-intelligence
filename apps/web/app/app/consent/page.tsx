@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { CONSENT_COPY, type ConsentType } from '../../../lib/consent'
+import { PatientScaffold, StatusBadge } from '../../../components/patient-ui'
 
 const DEFAULT_PRIVACY_POLICY_VERSION = 'v1.0-2024-04-01'
 const DEFAULT_TERMS_VERSION = 'v1.0-2024-04-01'
@@ -63,70 +64,101 @@ export default function ConsentPage(): ReactElement {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16">
-      <form
-        onSubmit={handleSubmit}
-        className="mx-auto max-w-3xl rounded-3xl border border-slate-800 bg-slate-900/80 p-8"
-      >
-        <p className="text-sm uppercase tracking-[0.3em] text-sky-300">Consent</p>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Before document upload</h1>
-        <p className="mt-4 text-slate-300">
-          Please review each DPDP consent item. None are pre-selected.
-        </p>
-        <div className="mt-8 space-y-4">
-          {CONSENT_TYPES.map((consentType) => (
-            <label
-              key={consentType}
-              className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-200"
-            >
-              <input
-                className="mt-1 h-5 w-5 accent-sky-300"
-                type="checkbox"
-                checked={checked[consentType]}
-                onChange={(event) => {
-                  setChecked((previous) => ({
-                    ...previous,
-                    [consentType]: event.target.checked,
-                  }))
-                }}
-              />
-              <span>
-                {CONSENT_COPY[consentType]}
-                {consentType === 'terms_of_service' ? (
-                  <button
-                    className="ml-1 text-sky-300 underline"
-                    type="button"
-                    onClick={() => {
-                      setShowPolicy(true)
-                    }}
-                  >
-                    Read policy
-                  </button>
-                ) : null}
-              </span>
-            </label>
-          ))}
-        </div>
-        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
-        <button
-          className="mt-8 rounded-xl bg-sky-300 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-          type="submit"
-          disabled={!allChecked || isPending}
-        >
-          {isPending ? 'Saving consent...' : 'Agree and continue'}
-        </button>
-      </form>
+    <PatientScaffold
+      eyebrow="Consent review"
+      title="Before document upload"
+      description="Please review each required consent item. None are pre-selected, and upload starts only after all five are accepted."
+    >
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <form onSubmit={handleSubmit} className="patient-surface p-8 sm:p-10">
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge label="Required before upload" tone="attention" />
+            <StatusBadge label="Human-reviewed workflow" tone="navy" />
+          </div>
+          <div className="mt-8 space-y-4">
+            {CONSENT_TYPES.map((consentType) => (
+              <label
+                key={consentType}
+                className="flex gap-4 rounded-3xl border border-navy-200 bg-navy-50/70 p-5 text-sm leading-7 text-navy-800"
+              >
+                <input
+                  className="mt-1 h-5 w-5 accent-teal-700"
+                  type="checkbox"
+                  checked={checked[consentType]}
+                  onChange={(event) => {
+                    setChecked((previous) => ({
+                      ...previous,
+                      [consentType]: event.target.checked,
+                    }))
+                  }}
+                />
+                <span>
+                  {CONSENT_COPY[consentType]}
+                  {consentType === 'terms_of_service' ? (
+                    <button
+                      className="ml-1 text-teal-700 underline"
+                      type="button"
+                      onClick={() => {
+                        setShowPolicy(true)
+                      }}
+                    >
+                      Read policy
+                    </button>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </div>
+          {error ? (
+            <p className="mt-4 rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
+              {error}
+            </p>
+          ) : null}
+          <button
+            className="patient-primary-button mt-8"
+            type="submit"
+            disabled={!allChecked || isPending}
+          >
+            {isPending ? 'Saving consent...' : 'Agree and continue'}
+          </button>
+        </form>
+
+        <aside className="patient-surface p-8 sm:p-10">
+          <p className="patient-eyebrow">What this means</p>
+          <h2 className="mt-3 text-2xl font-semibold text-navy-950">Plain-language summary</h2>
+          <div className="mt-6 grid gap-4">
+            <div className="patient-status-card border-l-4 border-teal-500">
+              <h3 className="font-semibold text-navy-950">Your documents stay within this workflow</h3>
+              <p className="mt-2 text-sm leading-7 text-navy-700">
+                ClaimClarity uses your claim documents to prepare a human-reviewed analysis and report.
+              </p>
+            </div>
+            <div className="patient-status-card border-l-4 border-navy-500">
+              <h3 className="font-semibold text-navy-950">AI is not the final decision-maker</h3>
+              <p className="mt-2 text-sm leading-7 text-navy-700">
+                Any AI-assisted draft remains internal until a reviewer checks it and signs off.
+              </p>
+            </div>
+            <div className="patient-status-card border-l-4 border-covered-500">
+              <h3 className="font-semibold text-navy-950">You can continue after this step</h3>
+              <p className="mt-2 text-sm leading-7 text-navy-700">
+                Once all items are accepted, you can start or resume your document upload.
+              </p>
+            </div>
+          </div>
+        </aside>
+      </div>
       {showPolicy ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-slate-950/80 px-6">
-          <section className="max-w-xl rounded-3xl border border-slate-700 bg-slate-900 p-8 text-slate-200">
-            <h2 className="text-2xl font-semibold text-white">Terms and Privacy Policy</h2>
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-navy-950/60 px-6 backdrop-blur-sm">
+          <section className="patient-surface max-w-xl p-8 text-navy-800">
+            <h2 className="text-2xl font-semibold text-navy-950">Terms and Privacy Policy</h2>
             <p className="mt-4">
               ClaimClarity processes uploaded insurance documents only to prepare a human-reviewed
               claim analysis report. Documents are not used to train AI models and are retained
               according to the stated deletion policy.
             </p>
             <button
-              className="mt-6 rounded-xl bg-sky-300 px-4 py-2 font-semibold text-slate-950"
+              className="patient-primary-button mt-6"
               type="button"
               onClick={() => {
                 setShowPolicy(false)
@@ -137,6 +169,6 @@ export default function ConsentPage(): ReactElement {
           </section>
         </div>
       ) : null}
-    </main>
+    </PatientScaffold>
   )
 }

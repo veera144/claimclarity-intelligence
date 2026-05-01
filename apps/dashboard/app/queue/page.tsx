@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@claimclarity/db'
 
+import { InternalScaffold } from '../../components/internal-ui'
 import { requireDashboardActor } from '../../lib/review/session'
 
 import { QueueTable } from './queue-table'
@@ -24,17 +25,35 @@ export default async function QueuePage(): Promise<ReactElement> {
   if (error) throw new Error(error.message)
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-6 py-10 text-neutral-100">
-      <div className="mx-auto max-w-6xl">
-        <p className="text-sm uppercase text-emerald-300">Reviewer queue</p>
-        <h1 className="mt-3 text-3xl font-semibold">Cases ready for human review</h1>
-        <p className="mt-3 max-w-3xl text-neutral-300">
-          AI drafts stay internal until a reviewer confirms every finding, clears escalations, and signs off.
-        </p>
-        <div className="mt-8">
-          <QueueTable actorId={actor.id} actorRole={actor.role} cases={data} />
+    <InternalScaffold
+      eyebrow="Reviewer queue"
+      title="Cases ready for human review"
+      description="AI drafts stay internal until a reviewer confirms every finding, clears escalations, and signs off."
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="internal-status-card border-l-4 border-teal-500">
+          <p className="text-sm font-medium text-slate-500">Open cases</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{data.length}</p>
+        </div>
+        <div className="internal-status-card border-l-4 border-attention-500">
+          <p className="text-sm font-medium text-slate-500">Escalated</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">
+            {data.filter((caseRow) => caseRow.status === 'escalated').length}
+          </p>
+        </div>
+        <div className="internal-status-card border-l-4 border-navy-500">
+          <p className="text-sm font-medium text-slate-500">Ready to start</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">
+            {data.filter((caseRow) => caseRow.status === 'ai_draft_ready').length}
+          </p>
         </div>
       </div>
-    </main>
+      <div className="mt-8">
+        <p className="mb-4 max-w-3xl internal-copy">
+          Keep the queue tight, finish findings before sign-off, and use escalation only when the reviewer needs expert input.
+        </p>
+        <QueueTable actorId={actor.id} actorRole={actor.role} cases={data} />
+      </div>
+    </InternalScaffold>
   )
 }

@@ -2,8 +2,11 @@
 
 import type { FormEvent, ReactElement } from 'react'
 import { Suspense, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createBrowserClient } from '@claimclarity/db'
+import { createBrowserClient } from '@claimclarity/db/client.browser'
+
+import { PatientAuthShell } from '../../../components/patient-ui'
 
 function LoginForm(): ReactElement {
   const router = useRouter()
@@ -37,17 +40,28 @@ function LoginForm(): ReactElement {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl shadow-slate-950"
-      >
-        <p className="text-sm uppercase tracking-[0.3em] text-sky-300">Patient Login</p>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Welcome back</h1>
-        <label className="mt-8 block text-sm text-slate-200">
-          Email
+    <PatientAuthShell
+      eyebrow="Patient sign in"
+      title="Welcome back"
+      description="Sign in to continue your case, review your status, or open a delivered report."
+      asideTitle="What to expect"
+      asideBody="ClaimClarity keeps the workflow plain and human-reviewed. We show what is complete, what needs action, and what happens next."
+      asidePoints={[
+        'Reports stay behind login until reviewer sign-off is complete.',
+        'You can return to the same case without starting over.',
+        'Outcome sharing happens only after your report is delivered.',
+      ]}
+    >
+      <form onSubmit={handleSubmit}>
+        <p className="patient-eyebrow">Secure access</p>
+        <h2 className="mt-3 text-2xl font-semibold text-navy-950">Sign in to your account</h2>
+        <p className="mt-3 patient-copy">
+          Use the email and password linked to your ClaimClarity case.
+        </p>
+        <label className="mt-8 patient-label">
+          Email address
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+            className="patient-input"
             type="email"
             value={email}
             onChange={(event) => {
@@ -56,10 +70,10 @@ function LoginForm(): ReactElement {
             required
           />
         </label>
-        <label className="mt-4 block text-sm text-slate-200">
+        <label className="mt-5 patient-label">
           Password
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+            className="patient-input"
             type="password"
             value={password}
             onChange={(event) => {
@@ -68,20 +82,24 @@ function LoginForm(): ReactElement {
             required
           />
         </label>
-        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        {error ? (
+          <p className="mt-4 rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
+            {error}
+          </p>
+        ) : null}
         <button
-          className="mt-6 w-full rounded-xl bg-sky-300 px-4 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+          className="patient-primary-button mt-6 w-full"
           type="submit"
           disabled={isPending}
         >
           {isPending ? 'Signing in...' : 'Sign in'}
         </button>
-        <div className="mt-5 flex justify-between text-sm text-slate-300">
-          <a href="/signup">Sign up</a>
-          <a href="/forgot-password">Forgot password?</a>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-navy-600">
+          <Link href="/signup">Create an account</Link>
+          <Link href="/forgot-password">Forgot password?</Link>
         </div>
       </form>
-    </main>
+    </PatientAuthShell>
   )
 }
 

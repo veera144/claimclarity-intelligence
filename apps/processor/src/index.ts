@@ -21,8 +21,8 @@ import express from 'express'
 import { createServiceClient } from '@claimclarity/db'
 import { validateConfig } from '@claimclarity/shared'
 
-import { createHealthRouter } from './health'
-import { initializeProcessorSentry } from './sentry'
+import { createHealthRouter } from './health.ts'
+import { initializeProcessorSentry } from './sentry.ts'
 
 initializeProcessorSentry()
 validateConfig()

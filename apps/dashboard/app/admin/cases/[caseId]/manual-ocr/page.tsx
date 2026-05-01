@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServiceClient } from '@claimclarity/db'
 
+import { InternalBadge, InternalScaffold } from '../../../../../components/internal-ui'
 import { requireDashboardActor } from '../../../../../lib/review/session'
 
 import { completeManualOcrAction } from './actions'
@@ -114,9 +115,7 @@ export default async function ManualOcrPage({ params }: PageProps): Promise<Reac
       .maybeSingle(),
     serviceClient
       .from('documents')
-      .select(
-        'id, doc_type, quality_status, quality_failure_reason, ocr_status, uploaded_at'
-      )
+      .select('id, doc_type, quality_status, quality_failure_reason, ocr_status, uploaded_at')
       .eq('case_id', params.caseId)
       .order('uploaded_at', { ascending: true }),
   ])
@@ -136,87 +135,69 @@ export default async function ManualOcrPage({ params }: PageProps): Promise<Reac
   })
 
   return (
-    <main className="min-h-screen bg-navy-950 px-6 py-10 text-navy-50">
-      <div className="mx-auto max-w-5xl">
-        <p className="text-sm font-semibold uppercase text-teal-300">Manual OCR fallback</p>
-        <h1 className="mt-3 text-3xl font-semibold">Structured extraction completion</h1>
-        <p className="mt-3 max-w-3xl text-navy-100">
-          Complete only normalized fields needed by the existing extraction pipeline for case{' '}
-          {caseRow.case_ref}. Do not paste raw OCR text, raw Textract blocks, or full document
-          contents.
-        </p>
+    <InternalScaffold
+      eyebrow="Manual OCR fallback"
+      title="Structured extraction completion"
+      description={`Complete only normalized fields needed by the existing extraction pipeline for case ${caseRow.case_ref}. Do not paste raw OCR text, raw Textract blocks, or full document contents.`}
+    >
+      <section className="internal-status-card border-l-4 border-attention-500">
+        Amount rules: bill line totals use paise. Insurer approved and deducted totals use whole rupees.
+      </section>
 
-        <section className="mt-8 border-l-4 border-attention-500 bg-navy-900 p-5 text-sm text-navy-100">
-          Amount rules: bill line totals use paise. Insurer approved and deducted totals use whole
-          rupees.
-        </section>
+      <div className="mt-8 grid gap-6">
+        {documents.length === 0 ? (
+          <div className="internal-status-card border-l-4 border-teal-500">
+            <h2 className="font-semibold text-navy-950">No eligible manual extraction documents</h2>
+            <p className="mt-2 text-sm leading-7 text-slate-600">
+              This page only accepts documents marked failed or manual-required.
+            </p>
+          </div>
+        ) : null}
 
-        <div className="mt-8 grid gap-6">
-          {documents.length === 0 ? (
-            <div className="border-l-4 border-teal-500 bg-navy-900 p-5">
-              <h2 className="font-semibold">No eligible manual extraction documents</h2>
-              <p className="mt-2 text-sm text-navy-100">
-                This page only accepts documents marked failed or manual-required.
-              </p>
-            </div>
-          ) : null}
+        {documents.map((document) => {
+          const schemaType = schemaForDocument(document.doc_type)
+          if (!schemaType) return null
 
-          {documents.map((document) => {
-            const schemaType = schemaForDocument(document.doc_type)
-            if (!schemaType) return null
-
-            return (
-              <article className="border-l-4 border-teal-500 bg-navy-900 p-5" key={document.id}>
-                <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                  <div>
-                    <h2 className="text-xl font-semibold">{titleCase(document.doc_type)}</h2>
-                    <p className="mt-2 text-sm text-navy-100">
-                      {document.quality_failure_reason ??
-                        'Manual structured extraction is available for this document.'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    <span className="inline-flex items-center gap-2 rounded-lg border border-navy-700 px-2 py-1">
-                      <span className="h-2 w-2 rounded-full bg-attention-500" />
-                      {document.quality_status ?? 'quality pending'}
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-lg border border-navy-700 px-2 py-1">
-                      <span className="h-2 w-2 rounded-full bg-teal-500" />
-                      {document.ocr_status ?? 'ocr pending'}
-                    </span>
-                  </div>
+          return (
+            <article className="internal-surface border-l-4 border-teal-500 p-6 sm:p-8" key={document.id}>
+              <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+                <div>
+                  <h2 className="text-xl font-semibold text-navy-950">{titleCase(document.doc_type)}</h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    {document.quality_failure_reason ??
+                      'Manual structured extraction is available for this document.'}
+                  </p>
                 </div>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <InternalBadge label={document.quality_status ?? 'quality pending'} tone="attention" />
+                  <InternalBadge label={document.ocr_status ?? 'ocr pending'} tone="teal" />
+                </div>
+              </div>
 
-                <form action={completeManualOcrAction} className="mt-5 grid gap-3">
-                  <input name="case_id" type="hidden" value={caseRow.id} />
-                  <input name="document_id" type="hidden" value={document.id} />
-                  <input name="schema_type" type="hidden" value={schemaType} />
-                  <label className="grid gap-2 text-sm">
-                    {schemaType}
-                    <textarea
-                      className="min-h-72 rounded-lg border border-navy-700 bg-navy-950 px-3 py-2 font-mono text-sm text-navy-50"
-                      name="structured_json"
-                      placeholder={exampleFor(schemaType)}
-                      required
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    <button className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-navy-950">
-                      Save structured extraction
-                    </button>
-                    <Link
-                      className="rounded-lg border border-navy-700 px-4 py-2 text-sm font-semibold text-navy-100"
-                      href={`/cases/${caseRow.id}`}
-                    >
-                      Open review page
-                    </Link>
-                  </div>
-                </form>
-              </article>
-            )
-          })}
-        </div>
+              <form action={completeManualOcrAction} className="mt-5 grid gap-3">
+                <input name="case_id" type="hidden" value={caseRow.id} />
+                <input name="document_id" type="hidden" value={document.id} />
+                <input name="schema_type" type="hidden" value={schemaType} />
+                <label className="grid gap-2 text-sm font-medium text-navy-800">
+                  {schemaType}
+                  <textarea
+                    className="internal-textarea min-h-72 font-mono text-sm"
+                    name="structured_json"
+                    placeholder={exampleFor(schemaType)}
+                    required
+                  />
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  <button className="internal-primary-button">Save structured extraction</button>
+                  <Link className="internal-secondary-button" href={`/cases/${caseRow.id}`}>
+                    Open review page
+                  </Link>
+                </div>
+              </form>
+            </article>
+          )
+        })}
       </div>
-    </main>
+    </InternalScaffold>
   )
 }

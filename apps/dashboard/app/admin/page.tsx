@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import Link from 'next/link'
 import { createServerClient } from '@claimclarity/db'
 
+import { InternalBadge, InternalScaffold } from '../../components/internal-ui'
 import { requireAdminActor } from '../../lib/ops/admin'
 
 type CountResult = { count: number | null; error: { message: string } | null }
@@ -28,11 +29,11 @@ function countValue(result: CountResult): number {
   return result.count ?? 0
 }
 
-function metric(label: string, value: number | string): ReactElement {
+function metric(label: string, value: number | string, tone: string): ReactElement {
   return (
-    <div className="border border-neutral-800 p-4">
-      <p className="text-sm text-neutral-400">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    <div className={`internal-status-card border-l-4 ${tone}`}>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-navy-950">{value}</p>
     </div>
   )
 }
@@ -86,52 +87,58 @@ export default async function AdminOpsPage(): Promise<ReactElement> {
   }, {})
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-6 py-10 text-neutral-100">
-      <div className="mx-auto max-w-7xl">
-        <p className="text-sm uppercase text-emerald-300">Pilot operations</p>
-        <h1 className="mt-3 text-3xl font-semibold">Case operations overview</h1>
-        <p className="mt-3 max-w-3xl text-neutral-300">
-          External readiness items are tracked here for launch hygiene. They are not product failures.
-        </p>
+    <InternalScaffold
+      eyebrow="Pilot operations"
+      title="Case operations overview"
+      description="External readiness items are tracked here for launch hygiene. They are not product failures."
+    >
+      <section className="grid gap-4 md:grid-cols-3">
+        {metric('Active SLA cases', countValue(activeCases), 'border-teal-500')}
+        {metric('SLA breaches', countValue(breachedCases), 'border-attention-500')}
+        {metric('Failed jobs', countValue(failedJobs), 'border-deducted-500')}
+        {metric('Pending outcomes', countValue(pendingOutcomes), 'border-navy-500')}
+        {metric('Manual follow-ups', countValue(manualFollowUps), 'border-attention-500')}
+        {metric('Self-reported wins', countValue(highValueWins), 'border-covered-500')}
+      </section>
 
-        <section className="mt-8 grid gap-4 md:grid-cols-3">
-          {metric('Active SLA cases', countValue(activeCases))}
-          {metric('SLA breaches', countValue(breachedCases))}
-          {metric('Failed jobs', countValue(failedJobs))}
-          {metric('Pending outcomes', countValue(pendingOutcomes))}
-          {metric('Manual follow-ups', countValue(manualFollowUps))}
-          {metric('Self-reported wins', countValue(highValueWins))}
-        </section>
-
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
-          <div className="border-y border-neutral-800 py-5">
-            <h2 className="text-xl font-semibold">Readiness</h2>
-            <ul className="mt-4 space-y-3 text-sm text-neutral-300">
-              <li>Textract live smoke: pending AWS activation</li>
-              <li>OpenAI live smoke: pending live key activation</li>
-            </ul>
+      <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <div className="internal-surface p-6">
+          <h2 className="text-xl font-semibold text-navy-950">Readiness</h2>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <InternalBadge label="Textract live smoke pending" tone="attention" />
+            <InternalBadge label="OpenAI live smoke pending" tone="attention" />
           </div>
-          <div className="border-y border-neutral-800 py-5">
-            <h2 className="text-xl font-semibold">Payment segmentation</h2>
-            <div className="mt-4 grid gap-2 text-sm text-neutral-300">
-              {Object.entries(segmentSummary).map(([key, value]) => (
-                <div className="flex justify-between gap-4" key={key}>
-                  <span>{key}</span>
-                  <span>{value}</span>
-                </div>
-              ))}
-            </div>
+          <p className="mt-4 internal-copy">
+            Keep production-readiness follow-ups visible without conflating them with local pilot failures.
+          </p>
+        </div>
+        <div className="internal-surface p-6">
+          <h2 className="text-xl font-semibold text-navy-950">Payment segmentation</h2>
+          <div className="mt-4 grid gap-3 text-sm text-slate-600">
+            {Object.entries(segmentSummary).map(([key, value]) => (
+              <div
+                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3"
+                key={key}
+              >
+                <span>{key}</span>
+                <span className="font-semibold tabular-nums text-navy-950">{value}</span>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="mt-8 grid gap-3 md:grid-cols-3">
-          {OPS_LINKS.map((link) => (
-            <Link className="rounded border border-neutral-800 p-4 text-neutral-100 no-underline" href={link.href} key={link.href}>
-              {link.label}
-            </Link>
-          ))}
-        </section>
-      </div>
-    </main>
+      <section className="mt-8 grid gap-3 md:grid-cols-3">
+        {OPS_LINKS.map((link) => (
+          <Link
+            className="internal-surface p-4 text-navy-950 no-underline transition hover:-translate-y-0.5 hover:shadow-md"
+            href={link.href}
+            key={link.href}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </section>
+    </InternalScaffold>
   )
 }

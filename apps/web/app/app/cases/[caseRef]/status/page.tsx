@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServerClient, createServiceClient } from '@claimclarity/db'
 
+import { PatientScaffold, StatusBadge } from '../../../../../components/patient-ui'
+
 type StatusPageProps = {
   params: {
     caseRef: string
@@ -202,7 +204,7 @@ function actionLinks(input: {
 
   if (input.caseRow.status === 'documents_pending') {
     return (
-      <Link className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white" href={uploadHref}>
+      <Link className="patient-primary-button" href={uploadHref}>
         Resume upload
       </Link>
     )
@@ -210,7 +212,7 @@ function actionLinks(input: {
 
   if (input.caseRow.status === 'payment_pending') {
     return (
-      <Link className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white" href={`/app/cases/${caseRef}/pay`}>
+      <Link className="patient-primary-button" href={`/app/cases/${caseRef}/pay`}>
         Continue to payment
       </Link>
     )
@@ -219,10 +221,10 @@ function actionLinks(input: {
   if (input.caseRow.status === 'delivered' && input.report?.delivered_at) {
     return (
       <div className="flex flex-wrap gap-3">
-        <Link className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white" href={`/app/cases/${caseRef}/report`}>
+        <Link className="patient-primary-button" href={`/app/cases/${caseRef}/report`}>
           Open report
         </Link>
-        <Link className="rounded-lg border border-navy-300 px-4 py-2 text-sm font-semibold text-navy-800" href={`/app/outcomes/${caseRef}`}>
+        <Link className="patient-secondary-button" href={`/app/outcomes/${caseRef}`}>
           Share outcome
         </Link>
       </div>
@@ -292,49 +294,49 @@ export default async function PatientCaseStatusPage(
   const stage = stageCopy(caseRow as CaseStatusRow)
 
   return (
-    <main className="min-h-screen bg-navy-50 px-4 py-10 font-['IBM_Plex_Sans',Arial,sans-serif] text-navy-950">
-      <div className="mx-auto max-w-5xl">
-        <div className={`border-l-4 bg-white p-6 shadow-sm ${stage.tone}`}>
-          <p className="text-sm font-semibold uppercase text-teal-700">Case status</p>
-          <div className="mt-3 grid gap-5 md:grid-cols-[1fr_auto]">
-            <div>
-              <h1 className="text-3xl font-semibold">{caseRow.case_ref}</h1>
-              <p className="mt-3 max-w-2xl text-navy-700">{stage.body}</p>
-            </div>
-            <div className="flex items-start">{actionLinks({ caseRow: caseRow as CaseStatusRow, report })}</div>
-          </div>
+    <PatientScaffold
+      eyebrow="Case status"
+      title={caseRow.case_ref}
+      description={stage.body}
+      actions={actionLinks({ caseRow: caseRow as CaseStatusRow, report })}
+    >
+      <div className={`patient-status-card border-l-4 ${stage.tone}`}>
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge label={stage.title} tone={stage.tone.includes('covered') ? 'covered' : stage.tone.includes('attention') ? 'attention' : stage.tone.includes('slate') ? 'neutral' : stage.tone.includes('navy') ? 'navy' : 'teal'} />
+          {report?.delivered_at ? <StatusBadge label="Report available" tone="covered" /> : null}
         </div>
+      </div>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-4">
-          <div className="bg-white p-4">
+      <section className="mt-6 grid gap-4 md:grid-cols-4">
+        <div className="patient-subpanel p-4">
             <p className="text-sm font-medium text-navy-500">Current state</p>
             <p className="mt-2 font-semibold">{stage.title}</p>
-          </div>
-          <div className="bg-white p-4">
+        </div>
+        <div className="patient-subpanel p-4">
             <p className="text-sm font-medium text-navy-500">Current step</p>
             <p className="mt-2 font-semibold">
               {caseRow.current_step ? titleCase(caseRow.current_step) : 'Not started'}
             </p>
-          </div>
-          <div className="bg-white p-4">
+        </div>
+        <div className="patient-subpanel p-4">
             <p className="text-sm font-medium text-navy-500">Claim amount</p>
             <p className="mt-2 font-semibold tabular-nums">
               {formatWholeRupees(caseRow.claim_amount_inr)}
             </p>
-          </div>
-          <div className="bg-white p-4">
+        </div>
+        <div className="patient-subpanel p-4">
             <p className="text-sm font-medium text-navy-500">Started</p>
             <p className="mt-2 font-semibold">{formatDate(caseRow.created_at)}</p>
-          </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="mt-8 border-t border-navy-200 pt-6">
+      <section className="mt-8">
           <h2 className="text-xl font-semibold">Documents</h2>
           <div className="mt-4 grid gap-4">
             {documents.length === 0 ? (
-              <div className="border-l-4 border-attention-500 bg-white p-5">
+              <div className="patient-status-card border-l-4 border-attention-500">
                 <p className="font-semibold">No documents uploaded yet</p>
-                <p className="mt-2 text-sm text-navy-700">
+                <p className="mt-2 text-sm leading-7 text-navy-700">
                   Upload the required policy, hospital bill, and insurer response documents.
                 </p>
               </div>
@@ -343,22 +345,22 @@ export default async function PatientCaseStatusPage(
               const quality = qualityCopy(document)
               const ocr = ocrCopy(document)
               return (
-                <article className="border-l-4 border-teal-500 bg-white p-5" key={document.id}>
+                <article className="patient-status-card border-l-4 border-teal-500" key={document.id}>
                   <div className="grid gap-4 md:grid-cols-[1fr_auto]">
                     <div>
-                      <h3 className="font-semibold">
+                      <h3 className="font-semibold text-navy-950">
                         {titleCase(document.doc_type)}
                         {document.is_required ? ' (required)' : ''}
                       </h3>
-                      <p className="mt-2 text-sm text-navy-700">{quality.text}</p>
+                      <p className="mt-2 text-sm leading-7 text-navy-700">{quality.text}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm">
-                      <span className="inline-flex items-center gap-2 rounded-lg border border-navy-200 px-2 py-1">
-                        <span className={`h-2 w-2 rounded-full ${quality.dot}`} />
+                      <span className="patient-badge">
+                        <span className={`patient-dot ${quality.dot}`} />
                         {quality.label}
                       </span>
-                      <span className="inline-flex items-center gap-2 rounded-lg border border-navy-200 px-2 py-1">
-                        <span className={`h-2 w-2 rounded-full ${ocr.dot}`} />
+                      <span className="patient-badge">
+                        <span className={`patient-dot ${ocr.dot}`} />
                         {ocr.label}
                       </span>
                     </div>
@@ -367,37 +369,36 @@ export default async function PatientCaseStatusPage(
               )
             })}
           </div>
-        </section>
+      </section>
 
-        <section className="mt-8 grid gap-4 border-t border-navy-200 pt-6 md:grid-cols-3">
-          <div className="border-l-4 border-teal-500 bg-white p-5">
+      <section className="mt-8 grid gap-4 md:grid-cols-3">
+        <div className="patient-status-card border-l-4 border-teal-500">
             <h2 className="font-semibold">Payment</h2>
-            <p className="mt-2 text-sm text-navy-700">
+            <p className="mt-2 text-sm leading-7 text-navy-700">
               {caseRow.status === 'payment_pending'
                 ? 'Payment is ready when you are.'
                 : 'Payment is either not due yet, complete, or waived for this case.'}
             </p>
-          </div>
-          <div className="border-l-4 border-navy-500 bg-white p-5">
+        </div>
+        <div className="patient-status-card border-l-4 border-navy-500">
             <h2 className="font-semibold">Report</h2>
-            <p className="mt-2 text-sm text-navy-700">
+            <p className="mt-2 text-sm leading-7 text-navy-700">
               {report?.delivered_at
                 ? `Delivered on ${formatDate(report.delivered_at)}.`
                 : report?.signed_off_at
                   ? 'Reviewer sign-off is complete. Report delivery is next.'
                   : 'Reviewer sign-off is required before report delivery.'}
             </p>
-          </div>
-          <div className="border-l-4 border-covered-500 bg-white p-5">
+        </div>
+        <div className="patient-status-card border-l-4 border-covered-500">
             <h2 className="font-semibold">Outcome</h2>
-            <p className="mt-2 text-sm text-navy-700">
+            <p className="mt-2 text-sm leading-7 text-navy-700">
               {outcome?.outcome_type && outcome.outcome_type !== 'pending'
                 ? `Outcome recorded: ${titleCase(outcome.outcome_type)}.`
                 : 'Outcome sharing opens after your report is delivered.'}
             </p>
-          </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </section>
+    </PatientScaffold>
   )
 }

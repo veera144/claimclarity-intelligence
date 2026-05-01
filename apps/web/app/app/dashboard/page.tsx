@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient, createServiceClient } from '@claimclarity/db'
 
 import { hasCompleteConsent } from '../../../lib/consent'
+import { PatientScaffold, StatusBadge } from '../../../components/patient-ui'
 
 import { StartNewCaseButton } from './start-new-case-button'
 
@@ -58,6 +59,14 @@ function statusTone(status: PatientCaseRow['status']): string {
   if (status === 'payment_pending' || status === 'processing') return 'border-teal-500'
   if (status === 'documents_pending') return 'border-attention-500'
   return 'border-navy-500'
+}
+
+function statusBadgeTone(status: PatientCaseRow['status']): 'navy' | 'teal' | 'covered' | 'attention' | 'neutral' {
+  if (status === 'delivered') return 'covered'
+  if (status === 'documents_pending') return 'attention'
+  if (status === 'payment_pending' || status === 'processing') return 'teal'
+  if (status === 'closed') return 'neutral'
+  return 'navy'
 }
 
 function statusLabel(caseRow: PatientCaseRow): string {
@@ -145,101 +154,125 @@ export default async function PatientDashboardPage(): Promise<ReactElement> {
   const cases = data as PatientCaseRow[]
 
   return (
-    <main className="min-h-screen bg-navy-50 px-4 py-10 font-['IBM_Plex_Sans',Arial,sans-serif] text-navy-950">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex flex-col gap-5 border-b border-navy-200 pb-6 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase text-teal-700">ClaimClarity</p>
-            <h1 className="mt-3 text-3xl font-semibold">Your cases</h1>
-            <p className="mt-3 max-w-2xl text-navy-700">
-              Resume a case, check progress, or start a new claim analysis when you are ready.
-            </p>
-          </div>
-          {consentComplete ? (
-            <StartNewCaseButton />
-          ) : (
-            <Link
-              className="w-fit rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white"
-              href="/app/consent"
-            >
-              Review consent
-            </Link>
-          )}
+    <PatientScaffold
+      eyebrow="Patient dashboard"
+      title="Your cases"
+      description="Resume a case, check progress, or start a new claim analysis when you are ready."
+      actions={
+        consentComplete ? (
+          <StartNewCaseButton />
+        ) : (
+          <Link className="patient-primary-button" href="/app/consent">
+            Review consent
+          </Link>
+        )
+      }
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="patient-status-card border-l-4 border-teal-500">
+          <p className="text-sm font-medium text-navy-500">Active cases</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{cases.length}</p>
         </div>
+        <div className="patient-status-card border-l-4 border-navy-500">
+          <p className="text-sm font-medium text-navy-500">Report-ready cases</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">
+            {cases.filter((caseRow) => caseRow.status === 'delivered').length}
+          </p>
+        </div>
+        <div className="patient-status-card border-l-4 border-attention-500">
+          <p className="text-sm font-medium text-navy-500">Cases needing action</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">
+            {
+              cases.filter((caseRow) =>
+                caseRow.status === 'documents_pending' || caseRow.status === 'payment_pending'
+              ).length
+            }
+          </p>
+        </div>
+      </div>
 
-        {!consentComplete ? (
-          <section className="mt-6 border-l-4 border-attention-500 bg-white p-5">
+      {!consentComplete ? (
+        <section className="mt-6 patient-status-card border-l-4 border-attention-500">
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge label="Action needed" tone="attention" />
+            <StatusBadge label="Existing cases remain visible" tone="navy" />
+          </div>
+          <div className="mt-4">
             <h2 className="font-semibold">Consent is needed before a new case starts</h2>
-            <p className="mt-2 text-sm text-navy-700">
+            <p className="mt-2 text-sm leading-7 text-navy-700">
               Existing cases remain visible. New upload or case creation starts only after consent.
             </p>
-          </section>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mt-8 grid gap-4">
+        {cases.length === 0 ? (
+          <div className="patient-empty-state">
+            <h2 className="text-lg font-semibold text-navy-950">No cases yet</h2>
+            <p className="mt-2 text-sm leading-7 text-navy-700">
+              Start a case only when you are ready to upload claim documents.
+            </p>
+          </div>
         ) : null}
 
-        <section className="mt-8 grid gap-4">
-          {cases.length === 0 ? (
-            <div className="border-l-4 border-teal-500 bg-white p-5">
-              <h2 className="font-semibold">No cases yet</h2>
-              <p className="mt-2 text-sm text-navy-700">
-                Start a case only when you are ready to upload claim documents.
-              </p>
-            </div>
-          ) : null}
-
-          {cases.map((caseRow) => {
-            const action = nextAction(caseRow)
-            return (
-              <article
-                className={`border-l-4 bg-white p-5 shadow-sm ${statusTone(caseRow.status)}`}
-                key={caseRow.id}
-              >
-                <div className="grid gap-5 md:grid-cols-[1fr_auto]">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-lg font-semibold">{caseRow.case_ref}</h2>
-                      <span className="inline-flex items-center gap-2 rounded-lg border border-navy-200 px-2 py-1 text-xs font-medium text-navy-700">
-                        <span className="h-2 w-2 rounded-full bg-teal-500" />
-                        {statusLabel(caseRow)}
-                      </span>
+        {cases.map((caseRow) => {
+          const action = nextAction(caseRow)
+          return (
+            <article
+              className={`patient-status-card border-l-4 ${statusTone(caseRow.status)}`}
+              key={caseRow.id}
+            >
+              <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-xl font-semibold text-navy-950">{caseRow.case_ref}</h2>
+                    <StatusBadge
+                      label={statusLabel(caseRow)}
+                      tone={statusBadgeTone(caseRow.status)}
+                    />
+                    {caseRow.case_type ? (
+                      <StatusBadge label={titleCase(caseRow.case_type)} tone="neutral" />
+                    ) : null}
+                  </div>
+                  <dl className="mt-5 grid gap-4 text-sm text-navy-700 sm:grid-cols-3">
+                    <div>
+                      <dt className="font-medium text-navy-500">Insurer</dt>
+                      <dd className="mt-1">{caseRow.insurer_name ?? 'Not captured'}</dd>
                     </div>
-                    <dl className="mt-4 grid gap-3 text-sm text-navy-700 sm:grid-cols-3">
-                      <div>
-                        <dt className="font-medium text-navy-500">Insurer</dt>
-                        <dd className="mt-1">{caseRow.insurer_name ?? 'Not captured'}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-navy-500">Claim amount</dt>
-                        <dd className="mt-1 font-medium tabular-nums">
-                          {formatWholeRupees(caseRow.claim_amount_inr)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-navy-500">Started</dt>
-                        <dd className="mt-1">{formatDate(caseRow.created_at)}</dd>
-                      </div>
-                    </dl>
-                    <p className="mt-4 text-sm text-navy-700">{action.note}</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Link
-                      className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white"
-                      href={action.href}
-                    >
-                      {action.label}
-                    </Link>
-                    <Link
-                      className="rounded-lg border border-navy-300 px-4 py-2 text-sm font-semibold text-navy-800"
-                      href={`/app/cases/${encodeURIComponent(caseRow.case_ref)}/status`}
-                    >
-                      Status
-                    </Link>
-                  </div>
+                    <div>
+                      <dt className="font-medium text-navy-500">Claim amount</dt>
+                      <dd className="mt-1 font-medium tabular-nums">
+                        {formatWholeRupees(caseRow.claim_amount_inr)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-navy-500">Started</dt>
+                      <dd className="mt-1">{formatDate(caseRow.created_at)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-4 text-sm leading-7 text-navy-700">{action.note}</p>
                 </div>
-              </article>
-            )
-          })}
-        </section>
-      </div>
-    </main>
+                <div className="flex flex-wrap items-start gap-3">
+                  <Link className="patient-primary-button" href={action.href}>
+                    {action.label}
+                  </Link>
+                  <Link
+                    className="patient-secondary-button"
+                    href={`/app/cases/${encodeURIComponent(caseRow.case_ref)}/status`}
+                  >
+                    Status
+                  </Link>
+                </div>
+              </div>
+            </article>
+          )
+        })}
+      </section>
+    </PatientScaffold>
   )
+}
+
+function titleCase(value: string): string {
+  return value.slice(0, 1).toUpperCase() + value.slice(1)
 }

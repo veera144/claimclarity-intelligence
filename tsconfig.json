@@ -5,7 +5,8 @@
     "apps/**/*.tsx",
     "packages/**/*.ts",
     "packages/**/*.tsx",
-    "tailwind.config.ts"
+    "tailwind.config.ts",
+    "tailwind.theme.ts"
   ],
   "exclude": ["node_modules", ".next", "dist"]
 }

@@ -78,6 +78,9 @@ Copy-Item .env.example apps/dashboard/.env.local
 
 If a file already exists, update it manually instead of overwriting known-good local secrets.
 
+The processor dev script loads the root `.env.local`. The two Next.js apps load their own
+`apps/web/.env.local` and `apps/dashboard/.env.local` files.
+
 Never put real secrets in this runbook or in committed files.
 
 ## 4. Required Env Checklist
@@ -210,7 +213,7 @@ http://localhost:3000
 Internal dashboard:
 
 ```powershell
-pnpm --filter @claimclarity/dashboard dev -- -p 3001
+pnpm --filter @claimclarity/dashboard dev:local
 ```
 
 Open:
@@ -303,6 +306,13 @@ pnpm job:all-once
 ```
 
 `CASE_ID` scopes case-specific jobs where supported. The commands print concise counts only and must not print secrets, raw OCR text, AI prompts, or extracted document content.
+
+One-shot quality job example:
+
+```powershell
+$env:CASE_ID='<case uuid>'
+pnpm job:quality
+```
 
 ## 9. Create a Test Patient
 
@@ -874,7 +884,9 @@ Exercise these before a pilot demo:
 ### Web or dashboard starts on the wrong port
 
 - Web defaults to 3000.
-- Start dashboard with `pnpm --filter @claimclarity/dashboard dev -- -p 3001`.
+- Start dashboard with `pnpm --filter @claimclarity/dashboard dev:local`.
+- Windows-safe alternative: `pnpm --filter @claimclarity/dashboard exec next dev -p 3001`.
+- If either app renders with unprocessed Tailwind classes or very limited styling, stop and restart that app's dev server after any Tailwind or PostCSS config changes so Next reloads the local CSS toolchain.
 - Confirm env values:
   - `NEXT_PUBLIC_APP_URL=http://localhost:3000`
   - `NEXT_PUBLIC_DASHBOARD_URL=http://localhost:3001`
@@ -883,6 +895,7 @@ Exercise these before a pilot demo:
 
 - The processor calls fail-fast config validation.
 - Check root `.env.local` for required Supabase, OpenAI, Razorpay, Resend, app URL, privacy, and terms values.
+- The processor package script loads root `.env.local`; run it from the repository root with `pnpm --filter @claimclarity/processor dev`.
 - Placeholder values may start the service, but live provider calls will not be verified.
 
 ### Platform Foundation verification fails

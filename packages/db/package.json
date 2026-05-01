@@ -6,11 +6,16 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "types": "./src/index.ts",
+      "browser": "./src/index.browser.ts",
+      "default": "./src/index.ts"
+    },
     "./audit": "./src/audit.ts",
     "./case-ref": "./src/case-ref.ts",
     "./client.browser": "./src/client.browser.ts",
     "./client.server": "./src/client.server.ts",
+    "./server": "./src/index.ts",
     "./outcome-tokens": "./src/outcome-tokens.ts",
     "./types": "./src/types.ts",
     "./verify": "./src/verify.ts"

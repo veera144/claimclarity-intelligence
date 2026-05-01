@@ -99,75 +99,81 @@ export function OutcomeForm(props: OutcomeFormProps): ReactElement {
       onSubmit={(event) => {
         void onSubmit(event)
       }}
-      className="mt-8 grid gap-8"
+      className="mt-8 grid gap-6"
     >
-      <section className="grid gap-3">
+      <section className="patient-surface p-6 sm:p-8">
         <h2 className="text-xl font-semibold">What action did you take?</h2>
-        {ACTION_OPTIONS.map((option) => (
-          <label key={option.value} className="flex gap-3 rounded border border-zinc-300 p-3">
-            <input
-              type="radio"
-              name="patientActionType"
-              value={option.value}
-              checked={patientActionType === option.value}
-              onChange={() => {
-                setPatientActionType(option.value)
-              }}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
-      </section>
-
-      {patientActionType !== 'closed_no_benefit' ? (
-        <section className="grid gap-3">
-          <h2 className="text-xl font-semibold">Did the insurer or TPA respond?</h2>
-          <label className="flex gap-3 rounded border border-zinc-300 p-3">
-            <input
-              type="radio"
-              name="insurerResponded"
-              value="yes"
-              checked={insurerResponded === 'yes'}
-              onChange={() => {
-                setInsurerResponded('yes')
-              }}
-            />
-            <span>Yes</span>
-          </label>
-          <label className="flex gap-3 rounded border border-zinc-300 p-3">
-            <input
-              type="radio"
-              name="insurerResponded"
-              value="waiting"
-              checked={insurerResponded === 'waiting'}
-              onChange={() => {
-                setInsurerResponded('waiting')
-              }}
-            />
-            <span>Still waiting</span>
-          </label>
-        </section>
-      ) : null}
-
-      {patientActionType !== 'closed_no_benefit' && insurerResponded === 'yes' ? (
-        <section className="grid gap-3">
-          <h2 className="text-xl font-semibold">What was the result?</h2>
-          {OUTCOME_OPTIONS.map((option) => (
-            <label key={option.value} className="flex gap-3 rounded border border-zinc-300 p-3">
+        <div className="mt-4 grid gap-3">
+          {ACTION_OPTIONS.map((option) => (
+            <label key={option.value} className="flex gap-3 rounded-2xl border border-navy-200 p-4">
               <input
                 type="radio"
-                name="outcomeType"
+                name="patientActionType"
                 value={option.value}
-                checked={outcomeType === option.value}
+                checked={patientActionType === option.value}
                 onChange={() => {
-                  setOutcomeType(option.value)
+                  setPatientActionType(option.value)
                 }}
               />
               <span>{option.label}</span>
             </label>
           ))}
-          <label className="grid gap-2">
-            <span className="font-medium">Final settled amount in whole rupees</span>
+        </div>
+      </section>
+
+      {patientActionType !== 'closed_no_benefit' ? (
+        <section className="patient-surface p-6 sm:p-8">
+          <h2 className="text-xl font-semibold">Did the insurer or TPA respond?</h2>
+          <div className="mt-4 grid gap-3">
+            <label className="flex gap-3 rounded-2xl border border-navy-200 p-4">
+              <input
+                type="radio"
+                name="insurerResponded"
+                value="yes"
+                checked={insurerResponded === 'yes'}
+                onChange={() => {
+                  setInsurerResponded('yes')
+                }}
+              />
+              <span>Yes</span>
+            </label>
+            <label className="flex gap-3 rounded-2xl border border-navy-200 p-4">
+              <input
+                type="radio"
+                name="insurerResponded"
+                value="waiting"
+                checked={insurerResponded === 'waiting'}
+                onChange={() => {
+                  setInsurerResponded('waiting')
+                }}
+              />
+              <span>Still waiting</span>
+            </label>
+          </div>
+        </section>
+      ) : null}
+
+      {patientActionType !== 'closed_no_benefit' && insurerResponded === 'yes' ? (
+        <section className="patient-surface p-6 sm:p-8">
+          <h2 className="text-xl font-semibold">What was the result?</h2>
+          <div className="mt-4 grid gap-3">
+            {OUTCOME_OPTIONS.map((option) => (
+              <label key={option.value} className="flex gap-3 rounded-2xl border border-navy-200 p-4">
+                <input
+                  type="radio"
+                  name="outcomeType"
+                  value={option.value}
+                  checked={outcomeType === option.value}
+                  onChange={() => {
+                    setOutcomeType(option.value)
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <label className="patient-label mt-5">
+            Final settled amount in whole rupees
             <input
               type="number"
               min="0"
@@ -177,12 +183,13 @@ export function OutcomeForm(props: OutcomeFormProps): ReactElement {
               onChange={(event) => {
                 setFinalAmount(event.target.value)
               }}
-              className="rounded border border-zinc-300 px-3 py-2 text-zinc-950"
+              className="patient-input"
             />
           </label>
-          <label className="grid gap-2">
-            <span className="font-medium">Settlement proof (optional)</span>
+          <label className="patient-label mt-5">
+            Settlement proof (optional)
             <input
+              className="patient-input"
               type="file"
               accept="application/pdf,image/jpeg,image/png"
               onChange={(event) => {
@@ -194,16 +201,16 @@ export function OutcomeForm(props: OutcomeFormProps): ReactElement {
         </section>
       ) : null}
 
-      <section className="grid gap-3">
+      <section className="patient-surface p-6 sm:p-8">
         <h2 className="text-xl font-semibold">Did the report help?</h2>
-        <label className="grid gap-2">
-          <span className="font-medium">Helpfulness, 1 to 5</span>
+        <label className="patient-label mt-4">
+          Helpfulness, 1 to 5
           <select
             value={satisfaction}
             onChange={(event) => {
               setSatisfaction(event.target.value)
             }}
-            className="rounded border border-zinc-300 px-3 py-2 text-zinc-950"
+            className="patient-select"
           >
             {[1, 2, 3, 4, 5].map((value) => (
               <option key={value} value={value}>
@@ -212,15 +219,15 @@ export function OutcomeForm(props: OutcomeFormProps): ReactElement {
             ))}
           </select>
         </label>
-        <label className="grid gap-2">
-          <span className="font-medium">Comment (optional)</span>
+        <label className="patient-label mt-5">
+          Comment (optional)
           <textarea
             maxLength={500}
             value={comment}
             onChange={(event) => {
               setComment(event.target.value)
             }}
-            className="min-h-28 rounded border border-zinc-300 px-3 py-2 text-zinc-950"
+            className="patient-textarea min-h-28"
           />
         </label>
       </section>
@@ -228,14 +235,16 @@ export function OutcomeForm(props: OutcomeFormProps): ReactElement {
       <button
         type="submit"
         disabled={submitState === 'submitting' || submitState === 'done'}
-        className="w-fit rounded bg-teal-700 px-5 py-3 font-semibold text-white disabled:bg-zinc-400"
+        className="patient-primary-button w-fit"
       >
         {submitState === 'submitting' ? 'Saving...' : 'Submit update'}
       </button>
       {message ? (
         <p
           className={
-            submitState === 'error' ? 'font-medium text-red-700' : 'font-medium text-teal-800'
+            submitState === 'error'
+              ? 'rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 font-medium text-deducted-700'
+              : 'rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 font-medium text-teal-800'
           }
         >
           {message}

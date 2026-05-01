@@ -46,12 +46,12 @@ export function ReportDownloadButton(props: ReportDownloadButtonProps): ReactEle
           void downloadReport()
         }}
         disabled={status === 'loading'}
-        className="rounded-lg bg-teal-700 px-5 py-3 font-semibold text-white disabled:cursor-wait disabled:bg-zinc-500"
+        className="patient-primary-button disabled:cursor-wait"
       >
         {status === 'loading' ? 'Preparing download...' : 'Download report'}
       </button>
       {status === 'error' ? (
-        <p className="mt-3 text-sm text-red-700">
+        <p className="mt-3 rounded-2xl border border-deducted-500/25 bg-deducted-50 px-4 py-3 text-sm text-deducted-700">
           We could not prepare the download. Please refresh and try again.
         </p>
       ) : null}
