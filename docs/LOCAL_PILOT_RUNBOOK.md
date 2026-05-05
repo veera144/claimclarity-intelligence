@@ -1016,3 +1016,5 @@ Exercise these before a pilot demo:
 <img width="1910" height="1072" alt="image" src="https://github.com/user-attachments/assets/9005560d-e081-42a7-8948-0b2b69c008a5" />
 
 <img width="1907" height="1056" alt="image" src="https://github.com/user-attachments/assets/3f286cae-95a5-4b77-b58b-153eff314ef7" />
+
+<img width="1913" height="1059" alt="image" src="https://github.com/user-attachments/assets/da6fc969-5d0f-4638-9d59-1f0529a6e917" />
