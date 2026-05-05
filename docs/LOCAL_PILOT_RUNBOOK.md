@@ -1008,3 +1008,5 @@ Exercise these before a pilot demo:
 - Confirm payment modes are not inferred from missing `payments` rows.
 - Confirm outcome amounts are whole rupees and are not divided by 100.
 <img width="1908" height="1054" alt="image" src="https://github.com/user-attachments/assets/01f0f151-4fb1-4654-a165-44548f0f0ccf" />
+
+<img width="1916" height="1063" alt="image" src="https://github.com/user-attachments/assets/4a6d3183-df63-4f4a-a3ad-3f4aee4164fc" />
