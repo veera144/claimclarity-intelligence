@@ -12,21 +12,53 @@ export type OpsEmail = {
   html: string
 }
 
-function requiredEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) throw new Error(`Required environment variable ${name} is not set`)
-  return value
+export type OpsEmailResult =
+  | { status: 'sent'; messageId: string }
+  | { status: 'skipped'; reason: string }
+
+type OpsEmailConfig = {
+  apiKey: string
+  fromEmail: string
 }
 
-export async function sendOpsEmail(email: OpsEmail): Promise<string> {
+function getOpsEmailConfig(): OpsEmailConfig | null {
+  const apiKey = process.env.RESEND_API_KEY
+  const fromEmail = process.env.RESEND_FROM_EMAIL
+
+  if (apiKey && fromEmail) {
+    return { apiKey, fromEmail }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    const missing = [
+      apiKey ? null : 'RESEND_API_KEY',
+      fromEmail ? null : 'RESEND_FROM_EMAIL',
+    ].filter((name): name is string => typeof name === 'string')
+
+    throw new Error(`Required environment variable ${missing.join(', ')} is not set`)
+  }
+
+  return null
+}
+
+export async function sendOpsEmail(email: OpsEmail): Promise<OpsEmailResult> {
+  const config = getOpsEmailConfig()
+
+  if (!config) {
+    return {
+      status: 'skipped',
+      reason: 'Resend is not configured in this local/dev environment',
+    }
+  }
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${requiredEnv('RESEND_API_KEY')}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: requiredEnv('RESEND_FROM_EMAIL'),
+      from: config.fromEmail,
       to: email.to,
       subject: email.subject,
       text: email.text,
@@ -40,5 +72,5 @@ export async function sendOpsEmail(email: OpsEmail): Promise<string> {
 
   const payload = (await response.json()) as { id?: unknown }
   if (typeof payload.id !== 'string') throw new Error('Resend returned no message id')
-  return payload.id
+  return { status: 'sent', messageId: payload.id }
 }

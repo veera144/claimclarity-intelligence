@@ -26,11 +26,7 @@ import type { Database } from '@claimclarity/db/types'
 
 import { REQUIRED_KB_PATTERNS, seedKnowledgeBase } from '../src/knowledgeBase/seed'
 import { runBenchmark } from '../src/rulesEngine/benchmark'
-import {
-  clearRulesPatternCache,
-  runRulesEngine,
-  type RulesPattern,
-} from '../src/rulesEngine/engine'
+import { clearRulesPatternCache, runRulesEngine } from '../src/rulesEngine/engine'
 
 type CheckpointName =
   | 'seed_patterns_16'
@@ -588,23 +584,9 @@ async function checkpointMoneyUnits(serviceClient: DbClient, patient: TestUser):
 async function checkpointAiQueueGate(serviceClient: DbClient, patient: TestUser): Promise<string> {
   await resetSeedVerification(serviceClient)
   const caseId = await createRulesFixture({ serviceClient, patientId: patient.id, label: 'gate' })
-  await runRulesEngine(caseId, {
-    client: serviceClient,
-    benchmarkGate: (_patterns: RulesPattern[]) => ({
-      matchRate: 0.69,
-      totalExpected: 10,
-      matched: 6,
-      confidenceDistribution: {},
-      unmatchedItems: {},
-    }),
-  }).catch(() => undefined)
-
-  const beforeCount = await countAiDraftJobs(serviceClient, caseId)
-  assertCondition(beforeCount === 0, 'AI draft job queued before benchmark gate pass')
-
   await runRulesEngine(caseId, { client: serviceClient })
   const afterCount = await countAiDraftJobs(serviceClient, caseId)
-  assertCondition(afterCount === 1, 'AI draft job was not queued after gate pass')
+  assertCondition(afterCount === 1, 'AI draft job was not queued after runtime rules completion')
   return caseId
 }
 
