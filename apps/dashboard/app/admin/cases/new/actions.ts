@@ -94,7 +94,7 @@ export async function createAdminPilotCaseAction(formData: FormData): Promise<vo
   if (childError) throw new Error(childError.message)
 
   const uploadLink = `${appUrl()}/app/upload`
-  const messageId = await sendOpsEmail({
+  const emailResult = await sendOpsEmail({
     to: patientEmail,
     subject: `A ClaimClarity case has been created - ${caseRow.case_ref}`,
     text: `A claim analysis case has been created for you. Please log in and upload your documents: ${uploadLink}`,
@@ -111,7 +111,10 @@ export async function createAdminPilotCaseAction(formData: FormData): Promise<vo
       case_ref: caseRow.case_ref,
       payment_mode: 'admin_waived',
       payment_reporting_category: 'waived',
-      email_message_id: messageId,
+      email_status: emailResult.status,
+      ...(emailResult.status === 'sent'
+        ? { email_message_id: emailResult.messageId }
+        : { email_warning: emailResult.reason }),
     },
   })
 

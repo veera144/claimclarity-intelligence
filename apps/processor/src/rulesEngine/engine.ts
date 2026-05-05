@@ -7,11 +7,10 @@
  * DEPENDENCIES:
  *   - @claimclarity/db
  *   - @claimclarity/shared/constants
- *   - /apps/processor/src/rulesEngine/benchmark.ts
  *
  * CALLED BY:
  *   - /apps/processor/tests/module5.test.ts
- *   - future processor job runner
+ *   - /apps/processor/src/cli/run-job.ts
  *
  * CALLS:
  *   - Supabase cases, documents, findings, and processing_jobs tables
@@ -24,8 +23,6 @@ import {
   type Json,
 } from '@claimclarity/db'
 import { KEYWORD_SCORE_THRESHOLD, SIMILARITY_THRESHOLD } from '@claimclarity/shared/constants'
-
-import { runBenchmark, type BenchmarkReport } from './benchmark'
 
 export type RulesBillLine = {
   line_item: string
@@ -598,23 +595,22 @@ export function evaluateRules(input: RulesEvaluationInput): RulesEvaluationOutpu
 }
 
 /**
- * Runs Module 5 rules for one case and queues AI draft generation only after benchmark gate pass.
+ * Runs Module 5 rules for one runtime case and queues AI draft generation.
  *
  * SIDE EFFECTS: replaces unreviewed findings, updates case confidence/current_step, queues ai_draft_generation
- * THROWS: Error when required extraction data is missing, benchmark gate fails, or Supabase rejects writes
+ * THROWS: Error when required extraction data is missing or Supabase rejects writes
  * IDEMPOTENT: yes, unreviewed generated findings and AI job idempotency key prevent duplicates
  *
  * @param caseId - Case id currently at current_step=rules_engine
- * @param input - Optional service client and benchmark gate override for tests
- * @returns Benchmark report and number of generated findings
+ * @param input - Optional service client for tests and worker reuse
+ * @returns Number of generated findings
  */
 export async function runRulesEngine(
   caseId: string,
   input: {
     client?: DbClient
-    benchmarkGate?: (patterns: RulesPattern[]) => BenchmarkReport
   } = {}
-): Promise<{ findingsCreated: number; benchmark: BenchmarkReport }> {
+): Promise<{ findingsCreated: number }> {
   const client = input.client ?? createServiceClient()
   const [caseRow, documents, patterns] = await Promise.all([
     loadCase(client, caseId),
@@ -624,11 +620,6 @@ export async function runRulesEngine(
   const billLines = collectBillLines(documents)
   if (billLines.length === 0) {
     throw new Error('Rules engine requires at least one structured hospital bill line.')
-  }
-
-  const benchmark = input.benchmarkGate ? input.benchmarkGate(patterns) : runBenchmark({ patterns })
-  if (benchmark.matchRate < 0.7) {
-    throw new Error(`Module 5 benchmark gate failed: ${benchmark.matchRate.toFixed(2)} < 0.70`)
   }
 
   const evaluation = evaluateRules({
@@ -663,7 +654,7 @@ export async function runRulesEngine(
     payload: { source: 'module5_rules_engine' },
   })
 
-  return { findingsCreated: evaluation.findings.length, benchmark }
+  return { findingsCreated: evaluation.findings.length }
 }
 
 /**
@@ -709,7 +700,7 @@ export async function processQueuedRulesEngineJobs(
           completed_at: new Date().toISOString(),
           result: {
             findings_created: result.findingsCreated,
-            benchmark_match_rate: result.benchmark.matchRate,
+            benchmark_gate: 'not_applied_to_runtime_case',
           },
         })
         .eq('id', job.id)
