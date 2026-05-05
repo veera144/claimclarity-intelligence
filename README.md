@@ -186,36 +186,6 @@ pnpm --filter @claimclarity/dashboard build
 
 The processor is TypeScript-first and is covered by root typecheck plus processor capability tests.
 
-Run capability verification and tests:
-
-```bash
-# Platform Foundation verification
-node --loader ts-node/esm/transpile-only --experimental-specifier-resolution=node packages/db/src/verify.ts
-
-# Capability checkpoint suites
-pnpm test:module1
-pnpm test:module2
-pnpm test:module3
-pnpm test:module4
-pnpm test:module5
-pnpm test:module6
-pnpm test:module7
-pnpm test:module8
-pnpm test:module9
-pnpm test:module10
-
-# AI prompt and structured-output regression tests
-pnpm test:ai-regression
-```
-
-Live smoke tests are production-readiness work, not proof of local pilot readiness:
-
-```bash
-pnpm smoke:textract
-```
-
-Run live smoke tests only with approved live credentials and an explicit production-readiness review plan.
-
 ## Known Pending Production Blockers
 
 ClaimClarity is not production-pilot ready until all of the following are completed and reviewed:
