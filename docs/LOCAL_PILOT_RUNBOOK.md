@@ -1007,3 +1007,4 @@ Exercise these before a pilot demo:
 - Confirm test/simulated cases are excluded from default product-proof analytics.
 - Confirm payment modes are not inferred from missing `payments` rows.
 - Confirm outcome amounts are whole rupees and are not divided by 100.
+<img width="1908" height="1054" alt="image" src="https://github.com/user-attachments/assets/01f0f151-4fb1-4654-a165-44548f0f0ccf" />
